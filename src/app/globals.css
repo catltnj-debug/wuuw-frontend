@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #050508;
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --bg-card-hover: rgba(255, 255, 255, 0.055);
+  --teal: #00F5D4;
+  --teal-dim: rgba(0, 245, 212, 0.15);
+  --teal-glow: rgba(0, 245, 212, 0.25);
+  --teal-border: rgba(0, 245, 212, 0.2);
+  --text-primary: #f0f0f0;
+  --text-secondary: #888;
+  --text-dim: #555;
+  --border: rgba(255, 255, 255, 0.07);
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text-primary);
+  --color-teal: var(--teal);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,245,212,0.2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,245,212,0.4); }
+
+/* 青绿光晕效果 */
+.teal-glow {
+  box-shadow: 0 0 20px rgba(0, 245, 212, 0.15), 0 0 40px rgba(0, 245, 212, 0.05);
+}
+.teal-glow-sm {
+  box-shadow: 0 0 10px rgba(0, 245, 212, 0.2);
+}
+.teal-text-glow {
+  text-shadow: 0 0 20px rgba(0, 245, 212, 0.5);
+}
+
+/* 太极旋转动画 */
+@keyframes taichi-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.taichi-spin {
+  animation: taichi-spin 20s linear infinite;
+}
+
+/* 脉冲光效 */
+@keyframes pulse-teal {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+.pulse-teal {
+  animation: pulse-teal 2s ease-in-out infinite;
+}
+
+/* 波形动画 */
+@keyframes wave-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+/* 输入框 */
+input, textarea, select {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--teal-border);
+  box-shadow: 0 0 0 3px rgba(0, 245, 212, 0.08);
+}

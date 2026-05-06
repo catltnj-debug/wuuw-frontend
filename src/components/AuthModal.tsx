@@ -1,0 +1,149 @@
+"use client";
+
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/lib/auth";
+
+const T = "#00F5D4";
+
+export default function AuthModal() {
+  const { showAuthModal, closeAuthModal, login, register } = useAuth();
+  const [tab, setTab] = useState<"login" | "register">("login");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      if (tab === "login") {
+        await login(username, password);
+      } else {
+        await register(username, email, password);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "操作失败，请重试");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const inputStyle = {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    color: "#e0e0e0",
+    borderRadius: 8,
+    padding: "10px 14px",
+    fontSize: 14,
+    width: "100%",
+    outline: "none",
+  };
+
+  return (
+    <AnimatePresence>
+      {showAuthModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+          onClick={closeAuthModal}
+        >
+          <motion.div
+            initial={{ scale: 0.92, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.92, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 28 }}
+            className="w-full max-w-sm mx-4 rounded-2xl p-8"
+            style={{ background: "#0d0d12", border: "1px solid rgba(0,245,212,0.15)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Logo */}
+            <div className="text-center mb-6">
+              <div className="text-xl font-bold tracking-widest" style={{ color: T }}>WUUW</div>
+              <div className="text-xs mt-1" style={{ color: "#555" }}>3D 创意市场</div>
+            </div>
+
+            {/* Tab 切换 */}
+            <div className="flex rounded-lg p-1 mb-6" style={{ background: "rgba(255,255,255,0.04)" }}>
+              {(["login", "register"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => { setTab(t); setError(""); }}
+                  className="flex-1 py-2 text-sm rounded-md font-medium transition-all"
+                  style={{
+                    background: tab === t ? T : "transparent",
+                    color: tab === t ? "#050508" : "#555",
+                  }}
+                >
+                  {t === "login" ? "登录" : "注册"}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <input
+                style={inputStyle}
+                placeholder="用户名"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                required
+                autoFocus
+              />
+              {tab === "register" && (
+                <input
+                  style={inputStyle}
+                  type="email"
+                  placeholder="邮箱"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              )}
+              <input
+                style={inputStyle}
+                type="password"
+                placeholder="密码"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+
+              {error && (
+                <div className="text-xs px-3 py-2 rounded-lg" style={{ background: "rgba(255,80,80,0.1)", color: "#ff6b6b" }}>
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 rounded-xl font-semibold text-sm mt-2 transition-all"
+                style={{
+                  background: loading ? "rgba(0,245,212,0.4)" : T,
+                  color: "#050508",
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                {loading ? "请稍候..." : tab === "login" ? "登录" : "注册并登录"}
+              </button>
+            </form>
+
+            <button
+              onClick={closeAuthModal}
+              className="mt-4 w-full text-xs text-center"
+              style={{ color: "#444" }}
+            >
+              取消
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
