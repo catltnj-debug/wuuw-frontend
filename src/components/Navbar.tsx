@@ -87,16 +87,16 @@ export default function Navbar() {
   }, [isLoggedIn]);
 
   const publicLinks = [
-    { href: "/discover",    label: nav.discover },
+    { href: "/",            label: lang === "zh" ? "首页"     : "Home"        },
     { href: "/models",      label: lang === "zh" ? "模型库"   : "Models"      },
+    { href: "/ideas",       label: "Ideas"                                    },
+    { href: "/projects",    label: "Projects"                                 },
     { href: "/tasks",       label: lang === "zh" ? "任务市场" : "Tasks"       },
+    { href: "/bounties",    label: lang === "zh" ? "悬赏大厅" : "Bounties"    },
     { href: "/leaderboard", label: lang === "zh" ? "排行榜"   : "Leaderboard" },
   ];
 
-  const authLinks = [
-    { href: "/workspace",     label: lang === "zh" ? "我的工作台" : "Workspace" },
-    { href: "/collaboration", label: lang === "zh" ? "协作"       : "Collab"    },
-  ];
+  const authLinks: { href: string; label: string }[] = [];
 
   const allLinks = isLoggedIn ? [...publicLinks, ...authLinks] : publicLinks;
 
@@ -119,7 +119,7 @@ export default function Navbar() {
         {/* 桌面导航 */}
         <div className="hidden md:flex items-center gap-7">
           {allLinks.map(({ href, label }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
+            const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
             return (
               <Link key={href} href={href}
                 className="relative text-sm tracking-wide transition-colors duration-200"

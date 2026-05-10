@@ -65,18 +65,40 @@ export async function apiGetAssets(params?: {
   categoryId?: number;
   tag?: string;
   creatorUsername?: string;
+  q?: string;
   page?: number;
   pageSize?: number;
 }) {
-  const q = new URLSearchParams();
-  if (params?.categoryId) q.set("category_id", String(params.categoryId));
-  if (params?.tag) q.set("tag", params.tag);
-  if (params?.creatorUsername) q.set("creator_username", params.creatorUsername);
-  if (params?.page) q.set("page", String(params.page));
-  if (params?.pageSize) q.set("page_size", String(params.pageSize));
-  const res = await fetch(`${API}/api/assets?${q}`);
+  const qs = new URLSearchParams();
+  if (params?.categoryId) qs.set("category_id", String(params.categoryId));
+  if (params?.tag) qs.set("tag", params.tag);
+  if (params?.creatorUsername) qs.set("creator_username", params.creatorUsername);
+  if (params?.q) qs.set("q", params.q);
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.pageSize) qs.set("page_size", String(params.pageSize));
+  const res = await fetch(`${API}/api/assets?${qs}`);
   if (!res.ok) throw new Error("获取列表失败");
   return res.json() as Promise<{ total: number; page: number; page_size: number; items: ApiAsset[] }>;
+}
+
+export async function apiGetCategories() {
+  const res = await fetch(`${API}/api/assets/categories/all`);
+  if (!res.ok) throw new Error("获取分类失败");
+  return res.json() as Promise<ApiCategory[]>;
+}
+
+export async function apiUploadMedia(assetId: number, file: File, kind: string) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("media_kind", kind);
+  const res = await fetch(`${API}/api/assets/${assetId}/media`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token() ?? ""}` },
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "上传媒体失败");
+  return data;
 }
 
 export async function apiGetAsset(id: number) {
@@ -197,6 +219,14 @@ export async function apiMarkOneRead(notificationId: number) {
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+export interface ApiCategory {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id?: number | null;
+  description?: string;
+}
+
 export interface ApiUser {
   id: number;
   username: string;

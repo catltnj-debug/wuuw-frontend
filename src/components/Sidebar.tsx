@@ -208,14 +208,14 @@ export default function Sidebar() {
             boxShadow: `0 0 18px rgba(0,245,212,0.12)`,
           }}
         >
-          {user?.avatar ?? "?"}
+          {user?.username?.[0]?.toUpperCase() ?? "?"}
         </div>
 
         <div className="text-sm font-medium mb-0.5" style={{ color: "#bbb" }}>
-          {user?.name ?? "Guest"}
+          {user?.username ?? "Guest"}
         </div>
         <div className="text-xs mb-4" style={{ color: "rgba(0,245,212,0.55)" }}>
-          {user?.tokens ?? 0} WUUW
+          {user?.token_balance ?? 0} WUUW
         </div>
 
         <div className="grid grid-cols-2 gap-1.5 w-full">

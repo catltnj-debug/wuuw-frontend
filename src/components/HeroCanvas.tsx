@@ -50,7 +50,7 @@ export default function HeroCanvas() {
   useEffect(() => {
     const cv = cvRef.current;
     if (!cv) return;
-    const ctx = cv.getContext("2d");
+    const ctx = cv.getContext("2d") as CanvasRenderingContext2D;
     if (!ctx) return;
 
     // ── Particles ────────────────────────────────────────────────────────────

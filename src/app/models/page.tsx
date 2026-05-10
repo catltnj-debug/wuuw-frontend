@@ -1,74 +1,108 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { apiGetAssets, type ApiAsset } from "@/lib/api";
 
 const T = "#00F5D4";
 const API_BASE = "http://localhost:8001";
 
-const TAG_FILTERS = ["全部", "家居", "工具", "玩具", "医疗", "工业", "艺术"];
+const TAG_FILTERS = [
+  { label: "全部", value: "" },
+  { label: "家居", value: "家居" },
+  { label: "工具", value: "工具" },
+  { label: "玩具", value: "玩具" },
+  { label: "医疗", value: "医疗" },
+  { label: "工业", value: "工业" },
+  { label: "艺术", value: "艺术" },
+];
 
 export default function ModelsPage() {
   const [assets, setAssets] = useState<ApiAsset[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [activeTag, setActiveTag] = useState("全部");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [activeTag, setActiveTag] = useState("");
+  const [page, setPage] = useState(1);
 
+  // Debounce search input
   useEffect(() => {
-    apiGetAssets({ pageSize: 100 })
-      .then(d => setAssets(d.items))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const filtered = assets.filter(a => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || a.title.toLowerCase().includes(q) || a.creator.toLowerCase().includes(q);
-    const matchTag = activeTag === "全部" || a.tags.includes(activeTag);
-    return matchSearch && matchTag;
-  });
+  const fetchAssets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await apiGetAssets({
+        q: debouncedSearch || undefined,
+        tag: activeTag || undefined,
+        page,
+        pageSize: 24,
+      });
+      setAssets(data.items);
+      setTotal(data.total);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, [debouncedSearch, activeTag, page]);
+
+  useEffect(() => { fetchAssets(); }, [fetchAssets]);
+
+  function handleTagChange(tag: string) {
+    setActiveTag(tag);
+    setPage(1);
+  }
+
+  const totalPages = Math.ceil(total / 24);
 
   return (
     <div style={{ background: "#050508", minHeight: "calc(100vh - 64px)" }}>
       <div className="max-w-7xl mx-auto px-6 py-8">
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        {/* Header + Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold" style={{ color: "#eee" }}>模型库</h1>
             <p className="text-sm mt-1" style={{ color: "#555" }}>
-              {loading ? "加载中…" : `共 ${filtered.length} 个资产${search ? `（"${search}"的结果）` : ""}`}
+              {loading ? "加载中…" : `共 ${total} 个资产${debouncedSearch ? `（"${debouncedSearch}"的结果）` : ""}`}
             </p>
           </div>
-          <input
-            type="text"
-            placeholder="搜索标题或创作者…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full sm:w-72 px-4 py-2 text-sm rounded-xl"
-            style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              color: "#ddd",
-              outline: "none",
-            }}
-          />
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="搜索标题…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full sm:w-72 pl-9 pr-4 py-2 text-sm rounded-xl"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#ddd",
+                outline: "none",
+              }}
+            />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2" width="14" height="14"
+              viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+            </svg>
+          </div>
         </div>
 
         {/* Tag Filters */}
         <div className="flex flex-wrap gap-2 mb-8">
-          {TAG_FILTERS.map(tag => (
-            <button
-              key={tag}
-              onClick={() => setActiveTag(tag)}
+          {TAG_FILTERS.map(({ label, value }) => (
+            <button key={value} onClick={() => handleTagChange(value)}
               className="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
               style={{
-                background: activeTag === tag ? T : "rgba(255,255,255,0.05)",
-                color: activeTag === tag ? "#050508" : "#666",
-                border: `1px solid ${activeTag === tag ? T : "rgba(255,255,255,0.08)"}`,
-              }}
-            >
-              {tag}
+                background: activeTag === value ? T : "rgba(255,255,255,0.05)",
+                color: activeTag === value ? "#050508" : "#666",
+                border: `1px solid ${activeTag === value ? T : "rgba(255,255,255,0.08)"}`,
+              }}>
+              {label}
             </button>
           ))}
         </div>
@@ -78,20 +112,38 @@ export default function ModelsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="rounded-2xl animate-pulse"
-                style={{ background: "rgba(255,255,255,0.04)", aspectRatio: "1 / 1.3" }} />
+                style={{ background: "rgba(255,255,255,0.04)", aspectRatio: "1 / 1.35" }} />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : assets.length === 0 ? (
           <div className="text-center py-24" style={{ color: "#3a3a3a" }}>
             <div className="text-5xl mb-4">⬡</div>
-            <p>{search ? `没有找到 "${search}"` : "暂无模型资产"}</p>
+            <p>{debouncedSearch ? `没有找到 "${debouncedSearch}"` : "暂无模型资产"}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filtered.map(asset => (
-              <AssetCard key={asset.id} asset={asset} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {assets.map(asset => <AssetCard key={asset.id} asset={asset} />)}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex justify-center gap-2 mt-10">
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                  className="px-3 py-1.5 rounded-lg text-xs border transition-all"
+                  style={{ borderColor: "rgba(255,255,255,0.1)", color: page === 1 ? "#333" : "#777" }}>
+                  上一页
+                </button>
+                <span className="px-3 py-1.5 text-xs" style={{ color: "#555" }}>
+                  {page} / {totalPages}
+                </span>
+                <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}
+                  className="px-3 py-1.5 rounded-lg text-xs border transition-all"
+                  style={{ borderColor: "rgba(255,255,255,0.1)", color: page >= totalPages ? "#333" : "#777" }}>
+                  下一页
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -99,11 +151,13 @@ export default function ModelsPage() {
 }
 
 function AssetCard({ asset }: { asset: ApiAsset }) {
-  const coverUrl = asset.cover_image ? `${API_BASE}${asset.cover_image}` : null;
+  const coverUrl = asset.cover_image
+    ? (asset.cover_image.startsWith("http") ? asset.cover_image : `${API_BASE}${asset.cover_image}`)
+    : null;
 
   return (
-    <div
-      className="rounded-2xl overflow-hidden cursor-pointer transition-all duration-200"
+    <Link href={`/assets/${asset.id}`}
+      className="rounded-2xl overflow-hidden block transition-all duration-200"
       style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}
       onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, {
         border: "1px solid rgba(0,245,212,0.25)",
@@ -114,15 +168,15 @@ function AssetCard({ asset }: { asset: ApiAsset }) {
         border: "1px solid rgba(255,255,255,0.07)",
         background: "rgba(255,255,255,0.025)",
         transform: "translateY(0)",
-      })}
-    >
+      })}>
+
       {/* Cover image */}
       <div className="aspect-square flex items-center justify-center overflow-hidden"
-        style={{ background: "rgba(0,245,212,0.03)" }}>
+        style={{ background: "rgba(0,245,212,0.02)" }}>
         {coverUrl ? (
           <img src={coverUrl} alt={asset.title} className="w-full h-full object-cover" />
         ) : (
-          <span style={{ fontSize: 52, opacity: 0.15 }}>⬡</span>
+          <span style={{ fontSize: 52, opacity: 0.08 }}>⬡</span>
         )}
       </div>
 
@@ -156,6 +210,6 @@ function AssetCard({ asset }: { asset: ApiAsset }) {
           )}
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
