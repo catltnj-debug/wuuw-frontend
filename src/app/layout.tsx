@@ -7,7 +7,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "WUUW — Dream. Create. Manifest.",
+  title: "WuuW — Dream. Create. Manifest.",
   description: "把你的悟变成真实之物",
 };
 

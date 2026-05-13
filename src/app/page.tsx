@@ -10,9 +10,9 @@ const T = "#00F5D4";
 const LIVE_FEED = [
   { user: "Aria.eth", model: "Modular Cable Organizer", action: { zh: "刚刚打印",    en: "just printed"    }, time: "2s"  },
   { user: "Kai_3D",   model: "Ergonomic Pen Holder",    action: { zh: "已显化",      en: "manifested"      }, time: "18s" },
-  { user: "Nova_M",   model: "Foldable Phone Stand",    action: { zh: "获得12 WUUW", en: "earned 12 WUUW"  }, time: "1m"  },
+  { user: "Nova_M",   model: "Foldable Phone Stand",    action: { zh: "获得12 WuuW", en: "earned 12 WuuW"  }, time: "1m"  },
   { user: "Zen.io",   model: "Herb Garden Tray",         action: { zh: "刚刚打印",    en: "just printed"    }, time: "2m"  },
-  { user: "Pulse",    model: "Cable Clip Set",           action: { zh: "获得8 WUUW",  en: "earned 8 WUUW"   }, time: "4m"  },
+  { user: "Pulse",    model: "Cable Clip Set",           action: { zh: "获得8 WuuW",  en: "earned 8 WuuW"   }, time: "4m"  },
 ];
 
 export default function HomePage() {

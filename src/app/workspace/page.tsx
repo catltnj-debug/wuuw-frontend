@@ -282,7 +282,7 @@ function EarningsTab() {
       </div>
       <div className="p-8 rounded-2xl text-center"
         style={{ background: "rgba(0,245,212,0.04)", border: "1px solid rgba(0,245,212,0.15)" }}>
-        <p className="text-xs tracking-widest uppercase mb-3" style={{ color: "#555" }}>WUUW</p>
+        <p className="text-xs tracking-widest uppercase mb-3" style={{ color: "#555" }}>WuuW</p>
         <div className="text-7xl font-bold mb-2 teal-text-glow" style={{ color: T }}>306</div>
         <p className="text-sm" style={{ color: "#555" }}>≈ $91.80 USD</p>
         <div className="flex gap-3 mt-6 justify-center">

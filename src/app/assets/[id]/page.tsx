@@ -1,17 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
+import { useLang } from "@/lib/language";
 import {
   apiGetAsset, apiGetZones, apiGetDiscussions,
   apiPostDiscussion, apiReplyDiscussion, apiLikeDiscussion,
   apiSummarize, apiConfirmSummary, apiGenerateTaskFromSummary,
   apiClaimTask, apiCompleteDiscTask,
+  apiGetBounties, apiPostBounty, apiClaimBounty, apiGetMyCredits,
+  apiTranslate, apiUploadVoice,
   type ApiAssetDetail, type ApiZone, type ApiZoneContent,
-  type ApiDiscussion, type ApiSummary, type ApiDiscTask,
+  type ApiDiscussion, type ApiSummary, type ApiDiscTask, type ApiBounty,
 } from "@/lib/api";
+
+const ModelViewer = lazy(() => import("@/components/ModelViewer"));
+
+const API_BASE = "http://localhost:8001";
 
 const T = "#00F5D4";
 const cardStyle: React.CSSProperties = {
@@ -23,6 +30,82 @@ const cardStyle: React.CSSProperties = {
 const TASK_STATUS_LABEL: Record<string, string> = {
   open: "待认领", claimed: "已认领", in_progress: "进行中", done: "已完成",
 };
+
+// ── Translation helpers ───────────────────────────────────────────────────────
+const LANG_FLAG: Record<string, string> = {
+  zh: "🇨🇳", en: "🇺🇸", ja: "🇯🇵", es: "🇪🇸", pt: "🇵🇹",
+  ko: "🇰🇷", fr: "🇫🇷", de: "🇩🇪", ar: "🇸🇦", ru: "🇷🇺",
+};
+const LANG_NAME: Record<string, string> = {
+  zh: "中文", en: "English", ja: "日本語", es: "Español", pt: "Português",
+  ko: "한국어", fr: "Français", de: "Deutsch", ar: "العربية", ru: "Русский",
+};
+
+function fmtDuration(sec: number) {
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+// ── Voice recorder ─────────────────────────────────────────────────────────────
+function VoiceRecorder({ onReady }: { onReady: (blob: Blob, dur: number) => void }) {
+  const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const mrRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function start() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      mrRef.current = mr;
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const b = new Blob(chunksRef.current, { type: "audio/webm" });
+        setBlob(b);
+        onReady(b, seconds);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mr.start(200);
+      setRecording(true);
+      setSeconds(0);
+      timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
+    } catch {
+      alert("无法访问麦克风，请检查权限设置");
+    }
+  }
+
+  function stop() {
+    mrRef.current?.stop();
+    if (timerRef.current) clearInterval(timerRef.current);
+    setRecording(false);
+  }
+
+  function clear() { setBlob(null); setSeconds(0); }
+
+  if (blob) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
+        style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.2)" }}>
+        <span style={{ color: T }}>🎙️ {fmtDuration(seconds)}</span>
+        <div className="flex-1 h-1 rounded-full" style={{ background: "rgba(0,245,212,0.3)" }}>
+          <div className="h-full rounded-full" style={{ background: T, width: "60%", opacity: 0.7 }} />
+        </div>
+        <button onClick={clear} className="text-xs" style={{ color: "#555" }}>✕</button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={recording ? stop : start}
+      className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs border transition-all"
+      style={{ borderColor: recording ? "#f56" : "rgba(0,245,212,0.3)", color: recording ? "#f56" : "#777" }}>
+      {recording ? <>⏹ {fmtDuration(seconds)}</> : <>🎙️ 语音</>}
+    </button>
+  );
+}
 const TASK_STATUS_COLOR: Record<string, string> = {
   open: T, claimed: "#F5A623", in_progress: "#BF5FFF", done: "#555",
 };
@@ -39,18 +122,58 @@ export default function AssetDetailPage() {
   const [zoneContent, setZoneContent] = useState<ApiZoneContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
+  const [assetBounties, setAssetBounties] = useState<ApiBounty[]>([]);
+  const [showBountyModal, setShowBountyModal] = useState(false);
+  const [bountyForm, setBountyForm] = useState({ title: "", description: "", amount: "", deadline: "" });
+  const [bountySubmitting, setBountySubmitting] = useState(false);
+  const [bountyErr, setBountyErr] = useState("");
+  const [myCredits, setMyCredits] = useState<number | null>(null);
+  const [claimingBountyId, setClaimingBountyId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!assetId) return;
-    Promise.all([apiGetAsset(assetId), apiGetZones(assetId)])
-      .then(([a, z]) => {
+    Promise.all([apiGetAsset(assetId), apiGetZones(assetId), apiGetBounties({ asset_id: assetId })])
+      .then(([a, z, bRes]) => {
         setAsset(a);
         setZones(z);
+        setAssetBounties(bRes.items);
         if (z.length > 0) setActiveZone(z[0]);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [assetId]);
+
+  useEffect(() => {
+    if (isLoggedIn) apiGetMyCredits(1).then(r => setMyCredits(r.balance)).catch(() => {});
+  }, [isLoggedIn]);
+
+  async function handlePostBounty() {
+    const amount = parseFloat(bountyForm.amount);
+    if (!bountyForm.title.trim()) { setBountyErr("标题不能为空"); return; }
+    if (!amount || amount < 1) { setBountyErr("悬赏金额至少 1 Credits"); return; }
+    if (myCredits !== null && amount > myCredits) {
+      setBountyErr(`Credits 不足（当前 ${myCredits.toFixed(1)}）`); return;
+    }
+    setBountySubmitting(true); setBountyErr("");
+    try {
+      await apiPostBounty({ title: bountyForm.title.trim(), description: bountyForm.description || undefined, amount, asset_id: assetId, deadline: bountyForm.deadline || undefined });
+      setShowBountyModal(false);
+      setBountyForm({ title: "", description: "", amount: "", deadline: "" });
+      const bRes = await apiGetBounties({ asset_id: assetId });
+      setAssetBounties(bRes.items);
+    } catch (e) { setBountyErr(e instanceof Error ? e.message : "发布失败"); }
+    finally { setBountySubmitting(false); }
+  }
+
+  async function handleClaimBounty(bountyId: number) {
+    setClaimingBountyId(bountyId);
+    try {
+      await apiClaimBounty(bountyId);
+      const bRes = await apiGetBounties({ asset_id: assetId });
+      setAssetBounties(bRes.items);
+    } catch (e) { alert(e instanceof Error ? e.message : "认领失败"); }
+    finally { setClaimingBountyId(null); }
+  }
 
   const loadZone = useCallback(async (zone: ApiZone) => {
     setActiveZone(zone);
@@ -78,6 +201,7 @@ export default function AssetDetailPage() {
   );
 
   return (
+    <>
     <div style={{ background: "#050508", minHeight: "calc(100vh - 64px)" }}>
       <div className="max-w-4xl mx-auto px-6 py-8">
 
@@ -97,14 +221,83 @@ export default function AssetDetailPage() {
                 <p className="text-sm leading-relaxed" style={{ color: "#888" }}>{asset.description}</p>
               )}
             </div>
-            {asset.latest_certificate && (
-              <div className="text-right flex-shrink-0">
-                <p className="text-xs mb-1" style={{ color: "#555" }}>版权证书</p>
-                <p className="text-xs font-mono" style={{ color: "#00F5D4" }}>{asset.latest_certificate}</p>
+            <div className="flex flex-col items-end gap-3 flex-shrink-0">
+              {isLoggedIn && (
+                <button onClick={() => setShowBountyModal(true)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap"
+                  style={{ background: "rgba(245,166,35,0.12)", color: "#F5A623", border: "1px solid rgba(245,166,35,0.25)" }}>
+                  💰 发起悬赏
+                </button>
+              )}
+              {asset.latest_certificate && (
+                <div className="text-right">
+                  <p className="text-xs mb-1" style={{ color: "#555" }}>版权证书</p>
+                  <p className="text-xs font-mono" style={{ color: "#00F5D4" }}>{asset.latest_certificate}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 3D 预览 / 媒体 ── */}
+        {asset.file_format === "GLB" || asset.file_format === "GLTF" ? (
+          <div className="mb-8">
+            <p className="text-xs font-semibold mb-3" style={{ color: "#666" }}>3D 预览</p>
+            <Suspense fallback={
+              <div className="rounded-2xl flex items-center justify-center"
+                style={{ height: 340, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <span style={{ color: "#555", fontSize: 13 }}>加载预览组件…</span>
+              </div>
+            }>
+              <ModelViewer
+                url={`${API_BASE}/${asset.file_path}`}
+                size="md"
+              />
+            </Suspense>
+          </div>
+        ) : asset.file_path ? (
+          <div className="mb-8 p-4 rounded-xl text-center"
+            style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <p className="text-xs mb-2" style={{ color: "#555" }}>
+              {asset.file_format} 格式暂不支持浏览器预览
+            </p>
+            <a href={`${API_BASE}/${asset.file_path}`} download
+              className="text-xs underline" style={{ color: "#00F5D4" }}>
+              下载文件查看
+            </a>
+          </div>
+        ) : null}
+
+        {/* ── 打印参数 ── */}
+        {asset.tech_params && Object.values(asset.tech_params).some(v => v != null) && (
+          <div className="mb-8 p-5 rounded-2xl" style={cardStyle}>
+            <p className="text-xs font-semibold mb-4" style={{ color: "#666" }}>打印参数</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { label: "材料", value: asset.tech_params.material },
+                { label: "喷嘴", value: asset.tech_params.nozzle_size ? `${asset.tech_params.nozzle_size} mm` : null },
+                { label: "层高", value: asset.tech_params.layer_height ? `${asset.tech_params.layer_height} mm` : null },
+                { label: "填充率", value: asset.tech_params.infill_pct != null ? `${asset.tech_params.infill_pct}%` : null },
+                { label: "重量", value: asset.tech_params.weight_g ? `${asset.tech_params.weight_g} g` : null },
+                { label: "尺寸", value: asset.tech_params.dim_x ? `${asset.tech_params.dim_x}×${asset.tech_params.dim_y}×${asset.tech_params.dim_z} mm` : null },
+                { label: "支撑", value: asset.tech_params.support_required != null ? (asset.tech_params.support_required ? "需要" : "不需要") : null },
+                { label: "打印时间", value: asset.tech_params.print_time_min ? `${Math.floor(asset.tech_params.print_time_min / 60)}h${asset.tech_params.print_time_min % 60}m` : null },
+              ].filter(p => p.value != null).map(p => (
+                <div key={p.label} className="p-3 rounded-xl"
+                  style={{ background: "rgba(255,255,255,0.03)" }}>
+                  <p className="text-xs mb-0.5" style={{ color: "#555" }}>{p.label}</p>
+                  <p className="text-sm font-medium" style={{ color: "#ccc" }}>{p.value}</p>
+                </div>
+              ))}
+            </div>
+            {asset.tech_params.assembly_notes && (
+              <div className="mt-3 p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
+                <p className="text-xs mb-0.5" style={{ color: "#555" }}>组装说明</p>
+                <p className="text-sm" style={{ color: "#ccc" }}>{asset.tech_params.assembly_notes}</p>
               </div>
             )}
           </div>
-        </div>
+        )}
 
         {/* ── 讨论区 Tabs ── */}
         {zones.length > 0 && (
@@ -142,8 +335,70 @@ export default function AssetDetailPage() {
             ) : null}
           </>
         )}
+
+        {/* ── 相关悬赏 ── */}
+        {assetBounties.length > 0 && (
+          <div className="mt-8">
+            <p className="text-xs font-semibold mb-3" style={{ color: "#666" }}>相关悬赏</p>
+            <div className="space-y-2">
+              {assetBounties.map(b => (
+                <AssetBountyRow key={b.id} bounty={b} userId={user?.id} isLoggedIn={isLoggedIn}
+                  claiming={claimingBountyId === b.id} onClaim={() => handleClaimBounty(b.id)} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
+
+    {/* ── 发起悬赏弹窗 ── */}
+    {showBountyModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: "rgba(0,0,0,0.7)" }}
+        onClick={e => { if (e.target === e.currentTarget) setShowBountyModal(false); }}>
+        <div className="w-full max-w-md rounded-2xl p-6" style={{ background: "#0d0d12", border: "1px solid rgba(245,166,35,0.2)" }}>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="font-semibold" style={{ color: "#eee" }}>💰 发起悬赏</h2>
+            {myCredits !== null && (
+              <span className="text-xs" style={{ color: "#666" }}>余额：<span style={{ color: T }}>{myCredits.toFixed(1)}</span> Credits</span>
+            )}
+          </div>
+          <div className="space-y-3">
+            <input value={bountyForm.title} onChange={e => setBountyForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="悬赏标题 *"
+              className="w-full px-3 py-2 rounded-xl text-sm"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+            <textarea rows={3} value={bountyForm.description} onChange={e => setBountyForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="描述需求（可选）"
+              className="w-full px-3 py-2 rounded-xl text-sm resize-none"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+            <div className="flex gap-3">
+              <input type="number" min="1" value={bountyForm.amount} onChange={e => setBountyForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="金额 (Credits) *"
+                className="flex-1 px-3 py-2 rounded-xl text-sm"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+              <input type="date" value={bountyForm.deadline} onChange={e => setBountyForm(f => ({ ...f, deadline: e.target.value }))}
+                className="flex-1 px-3 py-2 rounded-xl text-sm"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+            </div>
+          </div>
+          {bountyErr && <p className="mt-2 text-xs" style={{ color: "#f56" }}>{bountyErr}</p>}
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setShowBountyModal(false)}
+              className="flex-1 py-2 rounded-xl text-sm border"
+              style={{ borderColor: "rgba(255,255,255,0.1)", color: "#666" }}>
+              取消
+            </button>
+            <button onClick={handlePostBounty} disabled={bountySubmitting}
+              className="flex-1 py-2 rounded-xl text-sm font-semibold"
+              style={{ background: bountySubmitting ? "rgba(245,166,35,0.3)" : "#F5A623", color: "#050508" }}>
+              {bountySubmitting ? "发布中…" : "发布悬赏"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -158,17 +413,34 @@ function ZonePanel({
   isLoggedIn: boolean;
   onRefresh: () => void;
 }) {
+  const { lang } = useLang();
   const [postText, setPostText] = useState("");
   const [posting, setPosting] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [err, setErr] = useState("");
+  const [langHint, setLangHint] = useState<string | null>(null);
+  const [voiceBlob, setVoiceBlob] = useState<{ blob: Blob; dur: number } | null>(null);
+  const [uploadingVoice, setUploadingVoice] = useState(false);
 
   async function handlePost() {
-    if (!postText.trim()) return;
+    if (!postText.trim() && !voiceBlob) return;
     setPosting(true); setErr("");
     try {
-      await apiPostDiscussion(zone.id, postText.trim());
-      setPostText("");
+      let postedDisc: ApiDiscussion | null = null;
+      if (postText.trim()) {
+        postedDisc = await apiPostDiscussion(zone.id, postText.trim());
+        setPostText("");
+      }
+      if (voiceBlob && postedDisc) {
+        setUploadingVoice(true);
+        try { await apiUploadVoice(postedDisc.id, voiceBlob.blob); } catch { /* non-fatal */ }
+        finally { setUploadingVoice(false); }
+      }
+      setVoiceBlob(null);
+      if (postedDisc?.detected_lang && postedDisc.detected_lang !== lang) {
+        setLangHint(postedDisc.detected_lang);
+        setTimeout(() => setLangHint(null), 4000);
+      }
       onRefresh();
     } catch (e) { setErr(e instanceof Error ? e.message : "发帖失败"); }
     finally { setPosting(false); }
@@ -188,22 +460,37 @@ function ZonePanel({
       {/* 发帖框 */}
       {isLoggedIn && (
         <div className="p-4 rounded-2xl" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+          {langHint && (
+            <div className="mb-2 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5"
+              style={{ background: "rgba(245,166,35,0.08)", border: "1px solid rgba(245,166,35,0.2)", color: "#F5A623" }}>
+              {LANG_FLAG[langHint] ?? "🌐"} 检测到您使用 {LANG_NAME[langHint] ?? langHint} 发帖
+            </div>
+          )}
           <textarea rows={3} value={postText} onChange={e => setPostText(e.target.value)}
             placeholder={`在${zone.zone_name}发表你的看法…`}
-            className="w-full text-sm rounded-xl p-3 resize-none mb-3"
+            className="w-full text-sm rounded-xl p-3 resize-none mb-2"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+          {voiceBlob && (
+            <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
+              style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.2)" }}>
+              <span style={{ color: T }}>🎙️ {fmtDuration(voiceBlob.dur)}</span>
+              <span className="flex-1" style={{ color: "#555" }}>录音已附加</span>
+              <button onClick={() => setVoiceBlob(null)} style={{ color: "#555" }}>✕</button>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             {err && <p className="text-xs" style={{ color: "#ff6b6b" }}>{err}</p>}
             <div className="flex gap-2 ml-auto">
+              <VoiceRecorder onReady={(blob, dur) => setVoiceBlob({ blob, dur })} />
               <button onClick={handleSummarize} disabled={summarizing}
                 className="px-3 py-1.5 rounded-xl text-xs border transition-all"
                 style={{ borderColor: "rgba(0,245,212,0.3)", color: summarizing ? "#444" : T }}>
                 {summarizing ? "生成中…" : "✦ AI总结"}
               </button>
-              <button onClick={handlePost} disabled={!postText.trim() || posting}
+              <button onClick={handlePost} disabled={(!postText.trim() && !voiceBlob) || posting || uploadingVoice}
                 className="px-4 py-1.5 rounded-xl text-xs font-semibold transition-all"
-                style={{ background: posting || !postText.trim() ? "rgba(0,245,212,0.3)" : T, color: "#050508" }}>
-                {posting ? "发送中…" : "发帖"}
+                style={{ background: posting || (!postText.trim() && !voiceBlob) ? "rgba(0,245,212,0.3)" : T, color: "#050508" }}>
+                {posting ? "发送中…" : uploadingVoice ? "上传中…" : "发帖"}
               </button>
             </div>
           </div>
@@ -254,10 +541,25 @@ function DiscussionCard({
   onRefresh: () => void;
   depth?: number;
 }) {
+  const { lang } = useLang();
   const [replyText, setReplyText] = useState("");
   const [showReply, setShowReply] = useState(false);
   const [liking, setLiking] = useState(false);
   const [replying, setReplying] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [translated, setTranslated] = useState<string | null>(null);
+  const [showTranslated, setShowTranslated] = useState(false);
+
+  async function handleTranslate() {
+    if (translated) { setShowTranslated(v => !v); return; }
+    setTranslating(true);
+    try {
+      const res = await apiTranslate(disc.content, lang);
+      setTranslated(res.translated_text);
+      setShowTranslated(true);
+    } catch { /* ignore */ }
+    finally { setTranslating(false); }
+  }
 
   async function handleLike() {
     if (!isLoggedIn || liking) return;
@@ -289,16 +591,32 @@ function DiscussionCard({
             {disc.username[0]?.toUpperCase()}
           </div>
           <span className="text-xs font-medium" style={{ color: T }}>{disc.username}</span>
-          <span className="text-xs" style={{ color: "#3a3a3a" }}>{new Date(disc.created_at).toLocaleString("zh-CN")}</span>
+          {disc.detected_lang && (
+            <span className="text-xs px-1.5 py-0.5 rounded-md" style={{ background: "rgba(255,255,255,0.05)", color: "#555" }}>
+              {LANG_FLAG[disc.detected_lang] ?? "🌐"} {disc.detected_lang.toUpperCase()}
+            </span>
+          )}
+          <span className="text-xs" style={{ color: "#3a3a3a" }}>{new Date(disc.created_at).toLocaleString()}</span>
         </div>
-        <p className="text-sm leading-relaxed mb-3" style={{ color: "#ccc" }}>{disc.content}</p>
-        <div className="flex items-center gap-4">
+        <p className="text-sm leading-relaxed mb-1" style={{ color: "#ccc" }}>
+          {showTranslated && translated ? translated : disc.content}
+        </p>
+        {showTranslated && translated && (
+          <p className="text-xs mb-2" style={{ color: "#444" }}>— 翻译自原文</p>
+        )}
+        <div className="flex items-center gap-4 mt-2">
           <button onClick={handleLike} disabled={!isLoggedIn || liking || disc.user_id === userId}
             className="flex items-center gap-1 text-xs transition-all"
             style={{ color: "#555" }}
             onMouseEnter={e => isLoggedIn && disc.user_id !== userId && ((e.currentTarget as HTMLElement).style.color = T)}
             onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = "#555")}>
             ♡ {disc.likes_count}
+          </button>
+          <button onClick={handleTranslate} disabled={translating}
+            className="text-xs transition-all" style={{ color: showTranslated ? T : "#555" }}
+            onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = T)}
+            onMouseLeave={e => { if (!showTranslated) (e.currentTarget as HTMLElement).style.color = "#555"; }}>
+            {translating ? "翻译中…" : showTranslated ? "🌐 查看原文" : "🌐 翻译"}
           </button>
           {isLoggedIn && depth === 0 && (
             <button onClick={() => setShowReply(!showReply)}
@@ -441,6 +759,51 @@ function TaskRow({ task, username, isLoggedIn, onRefresh }: {
           className="px-3 py-1 rounded-lg text-xs font-medium flex-shrink-0"
           style={{ background: "rgba(0,245,212,0.1)", color: T }}>
           完成
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── 资产悬赏行 ────────────────────────────────────────────────────────────────
+const BOUNTY_STATUS_COLOR: Record<string, string> = {
+  open: T, claimed: "#F5A623", completed: "#888", cancelled: "#444",
+};
+const BOUNTY_STATUS_LABEL: Record<string, string> = {
+  open: "开放中", claimed: "已认领", completed: "已完成", cancelled: "已取消",
+};
+
+function AssetBountyRow({ bounty, userId, isLoggedIn, claiming, onClaim }: {
+  bounty: ApiBounty;
+  userId?: number;
+  isLoggedIn: boolean;
+  claiming: boolean;
+  onClaim: () => void;
+}) {
+  const statusColor = BOUNTY_STATUS_COLOR[bounty.status] ?? "#777";
+  const isOwner = userId === bounty.creator_id;
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-xl"
+      style={{ background: "rgba(245,166,35,0.04)", border: "1px solid rgba(245,166,35,0.1)" }}>
+      <span className="text-base flex-shrink-0">💰</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm truncate" style={{ color: "#ddd" }}>{bounty.title}</p>
+        <p className="text-xs mt-0.5" style={{ color: "#555" }}>
+          <span style={{ color: "#F5A623", fontWeight: 600 }}>{bounty.amount} Credits</span>
+          {bounty.deadline && <span> · 截止 {bounty.deadline}</span>}
+          <span> · by {bounty.creator_username}</span>
+        </p>
+      </div>
+      <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
+        style={{ background: `${statusColor}18`, color: statusColor }}>
+        {BOUNTY_STATUS_LABEL[bounty.status] ?? bounty.status}
+      </span>
+      {isLoggedIn && bounty.status === "open" && !isOwner && (
+        <button onClick={onClaim} disabled={claiming}
+          className="px-3 py-1 rounded-lg text-xs font-semibold flex-shrink-0"
+          style={{ background: claiming ? "rgba(245,166,35,0.3)" : "#F5A623", color: "#050508" }}>
+          {claiming ? "…" : "认领"}
         </button>
       )}
     </div>

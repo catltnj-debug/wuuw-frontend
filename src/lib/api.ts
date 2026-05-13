@@ -7,6 +7,9 @@ function token() {
 function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${token() ?? ""}`, "Content-Type": "application/json" };
 }
+function authHeadersNoContent(): Record<string, string> {
+  return { Authorization: `Bearer ${token() ?? ""}` };
+}
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 export async function apiRegister(username: string, email: string, password: string) {
@@ -263,6 +266,8 @@ export interface ApiAssetDetail {
   tags: { id: number; name: string }[];
   media_files: { id: number; kind: string; filename: string; file_path: string }[];
   latest_certificate?: string | null;
+  file_path?: string;
+  tech_params?: ApiTechParams;
   created_at: string;
   updated_at: string;
 }
@@ -378,6 +383,44 @@ export async function apiConfirmSummary(summaryId: number) {
   return data;
 }
 
+// ─── Translation & Voice ──────────────────────────────────────────────────────
+
+export async function apiTranslate(text: string, targetLang: string): Promise<ApiTranslateResult> {
+  const res = await fetch(`${API}/api/translate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, target_lang: targetLang }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "翻译失败");
+  return data;
+}
+
+export async function apiUploadVoice(discussionId: number, audioBlob: Blob): Promise<ApiVoiceMessage> {
+  const form = new FormData();
+  form.append("audio", audioBlob, "recording.webm");
+  const res = await fetch(`${API}/api/discussions/${discussionId}/voice`, {
+    method: "POST",
+    headers: authHeadersNoContent(),
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "上传失败");
+  return data;
+}
+
+export async function apiGetVoices(discussionId: number): Promise<ApiVoiceMessage[]> {
+  const res = await fetch(`${API}/api/discussions/${discussionId}/voices`);
+  if (!res.ok) throw new Error("获取语音消息失败");
+  return res.json();
+}
+
+export async function apiGetVoiceTranslation(voiceId: number, lang: string): Promise<{ translated_text: string }> {
+  const res = await fetch(`${API}/api/voice/${voiceId}/translation/${lang}`);
+  if (!res.ok) throw new Error("获取翻译失败");
+  return res.json();
+}
+
 export async function apiGenerateTaskFromSummary(summaryId: number) {
   const res = await fetch(`${API}/api/summaries/${summaryId}/generate-task`, {
     method: "POST",
@@ -459,8 +502,26 @@ export interface ApiDiscussion {
   content: string;
   parent_id?: number | null;
   likes_count: number;
+  detected_lang?: string | null;
   created_at: string;
   replies: ApiDiscussion[];
+}
+
+export interface ApiVoiceMessage {
+  id: number;
+  discussion_id: number;
+  user_id: number;
+  transcript?: string | null;
+  detected_lang?: string | null;
+  duration_seconds: number;
+  created_at: string;
+}
+
+export interface ApiTranslateResult {
+  translated_text: string;
+  source_lang?: string;
+  cached: boolean;
+  api_used: string;
 }
 
 export interface ApiSummary {
@@ -541,4 +602,403 @@ export interface ApiLeaderboardEntry {
   progress_pct: number;
   titles: string[];
   project_count: number;
+}
+
+// ─── Ideas ────────────────────────────────────────────────────────────────────
+export interface ApiIdea {
+  id: number;
+  idea_no: string;
+  title: string;
+  description?: string | null;
+  creator_id: number;
+  creator_username: string;
+  status: string;
+  views_count: number;
+  discussion_count: number;
+  created_at: string;
+}
+
+export interface ApiIdeaZone {
+  id: number;
+  idea_id: number;
+  zone_type: string;
+  zone_name: string;
+  order_index: number;
+  discussion_count: number;
+}
+
+export async function apiGetIdeas(params?: {
+  q?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.status) qs.set("status", params.status);
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.pageSize) qs.set("page_size", String(params.pageSize));
+  const res = await fetch(`${API}/api/ideas?${qs}`);
+  if (!res.ok) throw new Error("获取 Ideas 失败");
+  return res.json() as Promise<{ total: number; page: number; page_size: number; items: ApiIdea[] }>;
+}
+
+export async function apiPostIdea(title: string, description?: string) {
+  const res = await fetch(`${API}/api/ideas`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ title, description }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "发布 Idea 失败");
+  return data as ApiIdea;
+}
+
+export async function apiGetIdea(ideaId: number) {
+  const res = await fetch(`${API}/api/ideas/${ideaId}`);
+  if (!res.ok) throw new Error("获取 Idea 详情失败");
+  return res.json() as Promise<ApiIdea>;
+}
+
+export async function apiPatchIdeaStatus(ideaId: number, status: string) {
+  const res = await fetch(`${API}/api/ideas/${ideaId}/status`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "更新状态失败");
+  return data as ApiIdea;
+}
+
+export async function apiGetIdeaZones(ideaId: number) {
+  const res = await fetch(`${API}/api/ideas/${ideaId}/zones`);
+  if (!res.ok) throw new Error("获取 Idea 讨论区失败");
+  return res.json() as Promise<ApiIdeaZone[]>;
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+export interface ApiProject {
+  id: number;
+  project_no: string;
+  title: string;
+  description?: string | null;
+  creator_id: number;
+  creator_username: string;
+  idea_id?: number | null;
+  status: string;
+  github_url?: string | null;
+  members: ApiProjectMember[];
+  milestones: ApiProjectMilestone[];
+  created_at: string;
+}
+
+export interface ApiProjectMember {
+  user_id: number;
+  username: string;
+  role: string;
+  share_pct: number;
+  joined_at: string;
+}
+
+export interface ApiProjectMilestone {
+  id: number;
+  title: string;
+  description?: string | null;
+  due_date?: string | null;
+  completed: boolean;
+  created_at: string;
+}
+
+export async function apiGetProjects(params?: { q?: string; status?: string; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.status) qs.set("status", params.status);
+  if (params?.page) qs.set("page", String(params.page));
+  const res = await fetch(`${API}/api/projects?${qs}`);
+  if (!res.ok) throw new Error("获取项目失败");
+  return res.json() as Promise<{ total: number; page: number; page_size: number; items: ApiProject[] }>;
+}
+
+export async function apiPostProject(body: {
+  title: string; description?: string; idea_id?: number; github_url?: string;
+}) {
+  const res = await fetch(`${API}/api/projects`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "创建项目失败");
+  return data as ApiProject;
+}
+
+export async function apiGetProject(id: number) {
+  const res = await fetch(`${API}/api/projects/${id}`);
+  if (!res.ok) throw new Error("获取项目失败");
+  return res.json() as Promise<ApiProject>;
+}
+
+export async function apiGetMyCreatedProjects() {
+  const res = await fetch(`${API}/api/projects/my/created`, { headers: authHeaders() });
+  if (!res.ok) throw new Error("获取失败");
+  return res.json() as Promise<{ items: ApiProject[]; total: number }>;
+}
+
+export async function apiGetMyJoinedProjects() {
+  const res = await fetch(`${API}/api/projects/my/joined`, { headers: authHeaders() });
+  if (!res.ok) throw new Error("获取失败");
+  return res.json() as Promise<{ items: ApiProject[]; total: number }>;
+}
+
+export async function apiGetProjectTasks(projectId: number, status?: string) {
+  const qs = status ? `?status=${status}` : "";
+  const res = await fetch(`${API}/api/projects/${projectId}/tasks${qs}`);
+  if (!res.ok) return { total: 0, items: [] };
+  return res.json() as Promise<{ total: number; items: { id: number; title: string; status: string; assignee?: string | null; created_at: string }[] }>;
+}
+
+export async function apiPatchProjectStatus(id: number, status: string) {
+  const res = await fetch(`${API}/api/projects/${id}/status`, {
+    method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "更新失败");
+  return data as ApiProject;
+}
+
+export async function apiInviteProjectMember(
+  projectId: number, username: string, role: string, share_pct: number,
+) {
+  const res = await fetch(`${API}/api/projects/${projectId}/members`, {
+    method: "POST", headers: authHeaders(),
+    body: JSON.stringify({ username, role, share_pct }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "邀请失败");
+  return data as ApiProject;
+}
+
+export async function apiAddMilestone(
+  projectId: number, body: { title: string; description?: string; due_date?: string },
+) {
+  const res = await fetch(`${API}/api/projects/${projectId}/milestones`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "添加失败");
+  return data as ApiProjectMilestone;
+}
+
+export async function apiCompleteMilestone(projectId: number, milestoneId: number) {
+  const res = await fetch(`${API}/api/projects/${projectId}/milestones/${milestoneId}/complete`, {
+    method: "PATCH", headers: authHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "操作失败");
+  return data;
+}
+
+// ─── Bounties ─────────────────────────────────────────────────────────────────
+export interface ApiBounty {
+  id: number;
+  bounty_no: string;
+  title: string;
+  description?: string | null;
+  creator_id: number;
+  creator_username: string;
+  idea_id?: number | null;
+  asset_id?: number | null;
+  amount: number;
+  status: string;
+  deadline?: string | null;
+  claims: ApiBountyClaim[];
+  created_at: string;
+}
+
+export interface ApiBountyClaim {
+  id: number;
+  claimer_id: number;
+  claimer_username: string;
+  status: string;
+  submission_note?: string | null;
+  created_at: string;
+}
+
+export async function apiGetBounties(params?: { q?: string; status?: string; asset_id?: number; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.status) qs.set("status", params.status);
+  if (params?.asset_id) qs.set("asset_id", String(params.asset_id));
+  if (params?.page) qs.set("page", String(params.page));
+  const res = await fetch(`${API}/api/bounties?${qs}`);
+  if (!res.ok) throw new Error("获取悬赏失败");
+  return res.json() as Promise<{ total: number; page: number; page_size: number; items: ApiBounty[] }>;
+}
+
+export async function apiPostBounty(body: {
+  title: string; description?: string; amount: number; idea_id?: number; asset_id?: number; deadline?: string;
+}) {
+  const res = await fetch(`${API}/api/bounties`, {
+    method: "POST", headers: authHeaders(), body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "发布悬赏失败");
+  return data as ApiBounty;
+}
+
+export async function apiClaimBounty(bountyId: number, submission_note?: string) {
+  const res = await fetch(`${API}/api/bounties/${bountyId}/claim`, {
+    method: "POST", headers: authHeaders(),
+    body: JSON.stringify({ submission_note }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "认领失败");
+  return data as ApiBounty;
+}
+
+export async function apiCompleteBounty(bountyId: number, claimId: number) {
+  const res = await fetch(`${API}/api/bounties/${bountyId}/complete/${claimId}`, {
+    method: "POST", headers: authHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "操作失败");
+  return data as ApiBounty;
+}
+
+export async function apiCancelBounty(bountyId: number) {
+  const res = await fetch(`${API}/api/bounties/${bountyId}/cancel`, {
+    method: "POST", headers: authHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "取消失败");
+  return data as ApiBounty;
+}
+
+// ─── Credits ──────────────────────────────────────────────────────────────────
+export interface ApiCreditsLedger {
+  id: number;
+  amount: number;
+  action_type: string;
+  action_label: string;
+  ref_id?: number | null;
+  balance_after: number;
+  note?: string | null;
+  created_at: string;
+}
+
+export async function apiGetMyCredits(page = 1) {
+  const res = await fetch(`${API}/api/users/me/credits?page=${page}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("获取 Credits 失败");
+  return res.json() as Promise<{
+    balance: number;
+    total: number;
+    page: number;
+    items: ApiCreditsLedger[];
+  }>;
+}
+
+export async function apiTransferCredits(to_username: string, amount: number, note = "") {
+  const res = await fetch(`${API}/api/credits/transfer`, {
+    method: "POST", headers: authHeaders(),
+    body: JSON.stringify({ to_username, amount, note }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "转账失败");
+  return data;
+}
+
+export async function apiGetUserCreditsPublic(userId: number) {
+  const res = await fetch(`${API}/api/users/${userId}/credits/public`);
+  if (!res.ok) return null;
+  return res.json() as Promise<{ user_id: number; username: string; credits_balance: number }>;
+}
+
+// ─── Tech Params ──────────────────────────────────────────────────────────────
+export interface ApiTechParams {
+  material?: string | null;
+  nozzle_size?: number | null;
+  layer_height?: number | null;
+  infill_pct?: number | null;
+  weight_g?: number | null;
+  dim_x?: number | null;
+  dim_y?: number | null;
+  dim_z?: number | null;
+  support_required?: boolean | null;
+  assembly_notes?: string | null;
+  print_time_min?: number | null;
+}
+
+export async function apiPatchTechParams(assetId: number, params: ApiTechParams) {
+  const res = await fetch(`${API}/api/assets/${assetId}/tech-params`, {
+    method: "PATCH", headers: authHeaders(), body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "更新失败");
+  return data;
+}
+
+// ─── AI Assistant ─────────────────────────────────────────────────────────────
+export interface ApiChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  created_at?: string;
+}
+
+export async function apiAssistantChat(
+  message: string,
+  sessionId?: string,
+): Promise<{ reply: string; session_id: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60_000); // 60-second timeout
+
+  let res: Response;
+  try {
+    res = await fetch(`${API}/api/assistant/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, session_id: sessionId }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let data: { reply?: string; session_id?: string; detail?: string };
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`服务器返回了非 JSON 响应 (HTTP ${res.status})`);
+  }
+
+  if (!res.ok) {
+    throw new Error(data.detail || `请求失败 (HTTP ${res.status})`);
+  }
+
+  if (!data.reply || !data.session_id) {
+    throw new Error(`响应字段缺失: reply=${data.reply}, session_id=${data.session_id}`);
+  }
+
+  return { reply: data.reply, session_id: data.session_id };
+}
+
+export async function apiAssistantHistory(
+  sessionId: string,
+): Promise<{ session_id: string; messages: ApiChatMessage[] }> {
+  const res = await fetch(`${API}/api/assistant/history?session_id=${sessionId}`);
+  if (!res.ok) return { session_id: sessionId, messages: [] };
+  return res.json();
+}
+
+export async function apiAssistantReset(
+  sessionId?: string,
+): Promise<{ ok: boolean; session_id: string }> {
+  const res = await fetch(`${API}/api/assistant/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "重置失败");
+  return data;
 }

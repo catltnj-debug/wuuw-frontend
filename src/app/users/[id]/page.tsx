@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { apiGetUserProfile, apiGetExpLog, type ApiUserProfile, type ApiExpLog } from "@/lib/api";
+import { apiGetUserProfile, apiGetExpLog, apiGetUserCreditsPublic,
+         type ApiUserProfile, type ApiExpLog } from "@/lib/api";
 
 const T = "#00F5D4";
 
@@ -23,6 +24,7 @@ export default function UserProfilePage() {
   const userId = Number(params.id);
 
   const [profile, setProfile] = useState<ApiUserProfile | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
   const [logs, setLogs] = useState<ApiExpLog[]>([]);
   const [logPage, setLogPage] = useState(1);
   const [logTotal, setLogTotal] = useState(0);
@@ -31,8 +33,11 @@ export default function UserProfilePage() {
 
   useEffect(() => {
     if (!userId) return;
-    apiGetUserProfile(userId)
-      .then(setProfile)
+    Promise.all([
+      apiGetUserProfile(userId),
+      apiGetUserCreditsPublic(userId),
+    ])
+      .then(([p, c]) => { setProfile(p); setCredits(c?.credits_balance ?? null); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [userId]);
@@ -117,6 +122,16 @@ export default function UserProfilePage() {
               加入于 {new Date(profile.joined_at).toLocaleDateString("zh-CN")}
             </p>
           </div>
+
+          {/* Credits badge */}
+          {credits !== null && (
+            <div className="flex-shrink-0 flex flex-col items-center px-4 py-3 rounded-xl"
+              style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.12)" }}>
+              <span className="text-lg font-bold" style={{ color: T }}>💎</span>
+              <span className="text-base font-bold" style={{ color: T }}>{credits.toFixed(0)}</span>
+              <span className="text-xs" style={{ color: "#555" }}>Credits</span>
+            </div>
+          )}
         </div>
 
         {/* ── 参与项目 ── */}

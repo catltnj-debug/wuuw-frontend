@@ -1,215 +1,277 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { apiGetAssets, type ApiAsset } from "@/lib/api";
+import { apiGetAssets, apiGetCategories, type ApiAsset, type ApiCategory } from "@/lib/api";
+import { useLang } from "@/lib/language";
 
 const T = "#00F5D4";
-const API_BASE = "http://localhost:8001";
+const BG = "#050508";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
-const TAG_FILTERS = [
-  { label: "全部", value: "" },
-  { label: "家居", value: "家居" },
-  { label: "工具", value: "工具" },
-  { label: "玩具", value: "玩具" },
-  { label: "医疗", value: "医疗" },
-  { label: "工业", value: "工业" },
-  { label: "艺术", value: "艺术" },
-];
+const MATERIALS = ["PLA", "ABS", "PETG", "TPU", "Resin", "Nylon", "Carbon Fiber"];
 
-export default function ModelsPage() {
+const FORMAT_COLOR: Record<string, string> = {
+  STL: T, OBJ: "#F5A623", GLB: "#BF5FFF", STEP: "#4FC3F7",
+};
+
+function CoverImage({ src, title }: { src?: string | null; title: string }) {
+  const [err, setErr] = useState(false);
+  const url = src && !err ? `${API_BASE}${src}` : null;
+  return (
+    <div className="w-full aspect-[4/3] rounded-t-xl overflow-hidden flex items-center justify-center"
+      style={{ background: "rgba(255,255,255,0.03)" }}>
+      {url ? (
+        <img src={url} alt={title} onError={() => setErr(true)}
+          className="w-full h-full object-cover" />
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-1 w-full h-full">
+          <span className="text-3xl opacity-20">◈</span>
+          <span className="text-xs opacity-10" style={{ color: "#555" }}>{title[0]?.toUpperCase()}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AssetCard({ asset, zh }: { asset: ApiAsset; zh: boolean }) {
+  const fmt = asset.file_format?.toUpperCase();
+  const fmtColor = FORMAT_COLOR[fmt] ?? "#555";
+
+  return (
+    <div className="rounded-xl overflow-hidden flex flex-col transition-all duration-200 hover:-translate-y-0.5"
+      style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
+      <CoverImage src={asset.cover_image} title={asset.title} />
+
+      <div className="p-3.5 flex flex-col flex-1 gap-2">
+        {/* Format + tags */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {fmt && (
+            <span className="text-xs px-1.5 py-0.5 rounded font-mono font-semibold"
+              style={{ background: `${fmtColor}18`, color: fmtColor }}>
+              {fmt}
+            </span>
+          )}
+          {asset.tags.slice(0, 2).map(t => (
+            <span key={t} className="text-xs px-1.5 py-0.5 rounded"
+              style={{ background: "rgba(255,255,255,0.05)", color: "#555" }}>
+              {t}
+            </span>
+          ))}
+        </div>
+
+        {/* Title */}
+        <h3 className="text-sm font-semibold line-clamp-2 flex-1" style={{ color: "#ddd" }}>
+          {asset.title}
+        </h3>
+
+        {/* Creator */}
+        <p className="text-xs" style={{ color: "#484848" }}>@{asset.creator}</p>
+
+        {/* CTA */}
+        <Link href={`/assets/${asset.id}`}
+          className="block text-center py-1.5 rounded-lg text-xs font-semibold transition-all mt-1"
+          style={{ background: "rgba(0,245,212,0.1)", color: T, border: "1px solid rgba(0,245,212,0.2)" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(0,245,212,0.18)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(0,245,212,0.1)"; }}>
+          {zh ? "查看 / 下单" : "View / Order"}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default function MarketPage() {
+  const { lang } = useLang();
+  const zh = lang === "zh";
+
   const [assets, setAssets] = useState<ApiAsset[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [activeTag, setActiveTag] = useState("");
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
 
-  // Debounce search input
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
+  const [activeCat, setActiveCat] = useState<number | null>(null);
+  const [activeMat, setActiveMat] = useState("");
+  const [search, setSearch] = useState("");
+  const [debSearch, setDebSearch] = useState("");
+
+  const PAGE_SIZE = 24;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const catBarRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const t = setTimeout(() => {
-      setDebouncedSearch(search);
-      setPage(1);
-    }, 300);
+    apiGetCategories().then(setCategories).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => { setDebSearch(search); setPage(1); }, 300);
     return () => clearTimeout(t);
   }, [search]);
 
   const fetchAssets = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiGetAssets({
-        q: debouncedSearch || undefined,
-        tag: activeTag || undefined,
+      const res = await apiGetAssets({
+        categoryId: activeCat ?? undefined,
+        tag: activeMat || undefined,
+        q: debSearch || undefined,
         page,
-        pageSize: 24,
+        pageSize: PAGE_SIZE,
       });
-      setAssets(data.items);
-      setTotal(data.total);
-    } catch { /* ignore */ }
+      setAssets(res.items);
+      setTotal(res.total);
+    } catch { /* silent */ }
     finally { setLoading(false); }
-  }, [debouncedSearch, activeTag, page]);
+  }, [activeCat, activeMat, debSearch, page]);
 
   useEffect(() => { fetchAssets(); }, [fetchAssets]);
 
-  function handleTagChange(tag: string) {
-    setActiveTag(tag);
-    setPage(1);
-  }
+  function selectCat(id: number | null) { setActiveCat(id); setPage(1); }
+  function selectMat(m: string) { setActiveMat(prev => prev === m ? "" : m); setPage(1); }
+  function clearFilters() { setSearch(""); setActiveCat(null); setActiveMat(""); setPage(1); }
 
-  const totalPages = Math.ceil(total / 24);
+  const hasFilters = !!debSearch || activeCat !== null || !!activeMat;
 
   return (
-    <div style={{ background: "#050508", minHeight: "calc(100vh - 64px)" }}>
-      <div className="max-w-7xl mx-auto px-6 py-8">
+    <div style={{ background: BG, minHeight: "calc(100vh - 64px)" }}>
+      <div className="max-w-6xl mx-auto px-6 py-10">
 
-        {/* Header + Search */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold" style={{ color: "#eee" }}>模型库</h1>
-            <p className="text-sm mt-1" style={{ color: "#555" }}>
-              {loading ? "加载中…" : `共 ${total} 个资产${debouncedSearch ? `（"${debouncedSearch}"的结果）` : ""}`}
-            </p>
-          </div>
-          <div className="relative">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold mb-1" style={{ color: "#eee" }}>
+            {zh ? "市场" : "Market"}
+          </h1>
+          <p className="text-sm" style={{ color: "#555" }}>
+            {zh
+              ? "浏览已发布的 3D 模型，下单打印属于自己的实物"
+              : "Browse published 3D models — order a print of anything you like"}
+          </p>
+        </div>
+
+        {/* Search + material filter */}
+        <div className="flex flex-wrap items-start gap-3 mb-5">
+          {/* Search */}
+          <div className="relative" style={{ minWidth: 220 }}>
             <input
-              type="text"
-              placeholder="搜索标题…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full sm:w-72 pl-9 pr-4 py-2 text-sm rounded-xl"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "#ddd",
-                outline: "none",
-              }}
+              placeholder={zh ? "搜索模型名称…" : "Search models…"}
+              className="w-full pl-8 pr-3 py-2 rounded-xl text-sm outline-none"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "#ccc" }}
             />
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2" width="14" height="14"
-              viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs" style={{ color: "#444" }}>🔍</span>
+          </div>
+
+          {/* Material chips */}
+          <div className="flex items-center gap-1.5 flex-wrap flex-1">
+            <span className="text-xs flex-shrink-0" style={{ color: "#383838" }}>
+              {zh ? "材料" : "Material"}
+            </span>
+            {MATERIALS.map(m => (
+              <button key={m} onClick={() => selectMat(m)}
+                className="text-xs px-2.5 py-1 rounded-full transition-all flex-shrink-0"
+                style={{
+                  background: activeMat === m ? "rgba(0,245,212,0.12)" : "rgba(255,255,255,0.04)",
+                  color: activeMat === m ? T : "#555",
+                  border: `1px solid ${activeMat === m ? "rgba(0,245,212,0.3)" : "rgba(255,255,255,0.06)"}`,
+                }}>
+                {m}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Tag Filters */}
-        <div className="flex flex-wrap gap-2 mb-8">
-          {TAG_FILTERS.map(({ label, value }) => (
-            <button key={value} onClick={() => handleTagChange(value)}
-              className="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
+        {/* Category strip */}
+        {categories.length > 0 && (
+          <div ref={catBarRef}
+            className="flex items-center gap-2 mb-7 overflow-x-auto"
+            style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+            <button onClick={() => selectCat(null)}
+              className="flex-shrink-0 text-xs px-4 py-1.5 rounded-full font-medium transition-all"
               style={{
-                background: activeTag === value ? T : "rgba(255,255,255,0.05)",
-                color: activeTag === value ? "#050508" : "#666",
-                border: `1px solid ${activeTag === value ? T : "rgba(255,255,255,0.08)"}`,
+                background: activeCat === null ? T : "rgba(255,255,255,0.05)",
+                color: activeCat === null ? "#050508" : "#666",
+                border: `1px solid ${activeCat === null ? "transparent" : "rgba(255,255,255,0.07)"}`,
               }}>
-              {label}
+              {zh ? "全部" : "All"}
             </button>
-          ))}
+            {categories.map(cat => (
+              <button key={cat.id} onClick={() => selectCat(cat.id)}
+                className="flex-shrink-0 text-xs px-4 py-1.5 rounded-full transition-all"
+                style={{
+                  background: activeCat === cat.id ? T : "rgba(255,255,255,0.05)",
+                  color: activeCat === cat.id ? "#050508" : "#666",
+                  fontWeight: activeCat === cat.id ? 600 : 400,
+                  border: `1px solid ${activeCat === cat.id ? "transparent" : "rgba(255,255,255,0.07)"}`,
+                }}>
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Count + clear */}
+        <div className="flex items-center justify-between mb-5">
+          {!loading && (
+            <p className="text-xs" style={{ color: "#383838" }}>
+              {zh ? `共 ${total} 件` : `${total} result${total !== 1 ? "s" : ""}`}
+            </p>
+          )}
+          {hasFilters && !loading && (
+            <button onClick={clearFilters} className="text-xs" style={{ color: "#484848" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = T; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#484848"; }}>
+              {zh ? "清除筛选 ×" : "Clear filters ×"}
+            </button>
+          )}
         </div>
 
-        {/* Grid */}
+        {/* Asset grid */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="rounded-2xl animate-pulse"
-                style={{ background: "rgba(255,255,255,0.04)", aspectRatio: "1 / 1.35" }} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="rounded-xl animate-pulse"
+                style={{ background: "rgba(255,255,255,0.04)", aspectRatio: "3/4" }} />
             ))}
           </div>
         ) : assets.length === 0 ? (
-          <div className="text-center py-24" style={{ color: "#3a3a3a" }}>
-            <div className="text-5xl mb-4">⬡</div>
-            <p>{debouncedSearch ? `没有找到 "${debouncedSearch}"` : "暂无模型资产"}</p>
+          <div className="text-center py-24">
+            <div className="text-5xl mb-4 opacity-20">◈</div>
+            <p className="text-sm" style={{ color: "#333" }}>
+              {zh ? "暂无模型" : "No models found"}
+            </p>
+            {hasFilters && (
+              <button onClick={clearFilters} className="mt-3 text-xs underline" style={{ color: "#444" }}>
+                {zh ? "清除筛选条件" : "Clear filters"}
+              </button>
+            )}
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {assets.map(asset => <AssetCard key={asset.id} asset={asset} />)}
-            </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {assets.map(a => <AssetCard key={a.id} asset={a} zh={zh} />)}
+          </div>
+        )}
 
-            {totalPages > 1 && (
-              <div className="flex justify-center gap-2 mt-10">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="px-3 py-1.5 rounded-lg text-xs border transition-all"
-                  style={{ borderColor: "rgba(255,255,255,0.1)", color: page === 1 ? "#333" : "#777" }}>
-                  上一页
-                </button>
-                <span className="px-3 py-1.5 text-xs" style={{ color: "#555" }}>
-                  {page} / {totalPages}
-                </span>
-                <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}
-                  className="px-3 py-1.5 rounded-lg text-xs border transition-all"
-                  style={{ borderColor: "rgba(255,255,255,0.1)", color: page >= totalPages ? "#333" : "#777" }}>
-                  下一页
-                </button>
-              </div>
-            )}
-          </>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 mt-10">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-4 py-1.5 rounded-lg text-xs border transition-all"
+              style={{ borderColor: "rgba(255,255,255,0.1)", color: page === 1 ? "#2a2a2a" : "#777" }}>
+              {zh ? "上一页" : "Prev"}
+            </button>
+            <span className="text-xs" style={{ color: "#444" }}>
+              {page} / {totalPages}
+            </span>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+              className="px-4 py-1.5 rounded-lg text-xs border transition-all"
+              style={{ borderColor: "rgba(255,255,255,0.1)", color: page >= totalPages ? "#2a2a2a" : "#777" }}>
+              {zh ? "下一页" : "Next"}
+            </button>
+          </div>
         )}
       </div>
     </div>
-  );
-}
-
-function AssetCard({ asset }: { asset: ApiAsset }) {
-  const coverUrl = asset.cover_image
-    ? (asset.cover_image.startsWith("http") ? asset.cover_image : `${API_BASE}${asset.cover_image}`)
-    : null;
-
-  return (
-    <Link href={`/assets/${asset.id}`}
-      className="rounded-2xl overflow-hidden block transition-all duration-200"
-      style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}
-      onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, {
-        border: "1px solid rgba(0,245,212,0.25)",
-        background: "rgba(0,245,212,0.03)",
-        transform: "translateY(-2px)",
-      })}
-      onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, {
-        border: "1px solid rgba(255,255,255,0.07)",
-        background: "rgba(255,255,255,0.025)",
-        transform: "translateY(0)",
-      })}>
-
-      {/* Cover image */}
-      <div className="aspect-square flex items-center justify-center overflow-hidden"
-        style={{ background: "rgba(0,245,212,0.02)" }}>
-        {coverUrl ? (
-          <img src={coverUrl} alt={asset.title} className="w-full h-full object-cover" />
-        ) : (
-          <span style={{ fontSize: 52, opacity: 0.08 }}>⬡</span>
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <h3 className="font-semibold text-sm truncate flex-1" style={{ color: "#ddd" }}>
-            {asset.title}
-          </h3>
-          <span className="text-xs flex-shrink-0 px-1.5 py-0.5 rounded font-mono"
-            style={{ background: "rgba(0,245,212,0.08)", color: T, fontSize: 10 }}>
-            {asset.file_format}
-          </span>
-        </div>
-
-        <p className="text-xs mb-2 truncate" style={{ color: "#555" }}>by {asset.creator}</p>
-
-        {asset.certificate_no && (
-          <p className="text-xs font-mono truncate mb-2" style={{ color: "#383838" }}>
-            {asset.certificate_no}
-          </p>
-        )}
-
-        <div className="flex items-center justify-between">
-          <span className="text-xs" style={{ color: "#3a3a3a" }}>{asset.current_version}</span>
-          {asset.tags.length > 0 && (
-            <span className="text-xs px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(255,255,255,0.04)", color: "#555" }}>
-              {asset.tags[0]}
-            </span>
-          )}
-        </div>
-      </div>
-    </Link>
   );
 }

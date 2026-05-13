@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
-import { apiUploadAsset, apiUploadMedia, apiGetCategories, type ApiCategory } from "@/lib/api";
+import { apiUploadAsset, apiUploadMedia, apiGetCategories, apiPatchTechParams, type ApiCategory } from "@/lib/api";
 
 const T = "#00F5D4";
 
@@ -140,6 +140,21 @@ export default function UploadPage() {
         categoryId !== "" ? categoryId : undefined,
       );
       setUploadStep(1);
+
+      // save tech params to proper DB columns
+      await apiPatchTechParams(uploadResult.asset_id, {
+        material: tech.material || null,
+        nozzle_size: tech.nozzle_mm ? parseFloat(tech.nozzle_mm) : null,
+        layer_height: tech.layer_height ? parseFloat(tech.layer_height) : null,
+        infill_pct: tech.infill_pct ? parseInt(tech.infill_pct) : null,
+        weight_g: tech.weight_g ? parseFloat(tech.weight_g) : null,
+        dim_x: tech.dim_x ? parseFloat(tech.dim_x) : null,
+        dim_y: tech.dim_y ? parseFloat(tech.dim_y) : null,
+        dim_z: tech.dim_z ? parseFloat(tech.dim_z) : null,
+        support_required: tech.support_required,
+        assembly_notes: tech.assembly_notes || null,
+        print_time_min: tech.print_time_min ? parseInt(tech.print_time_min) : null,
+      }).catch(() => {}); // non-fatal
 
       for (const mf of mediaFiles) {
         await apiUploadMedia(uploadResult.asset_id, mf.file, mf.kind);

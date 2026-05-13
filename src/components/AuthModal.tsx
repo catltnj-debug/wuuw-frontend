@@ -3,11 +3,24 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
+import { useLang } from "@/lib/language";
+
+const COPY_ERR = { en: "Operation failed, please try again", zh: "操作失败，请重试", es: "Operación fallida, inténtalo de nuevo", pt: "Operação falhada, tente novamente", ja: "操作に失敗しました。もう一度お試しください" } as const;
+
+const AUTH_COPY = {
+  en: { subtitle: "3D Creative Market", loginTab: "Sign In", registerTab: "Register", username: "Username", email: "Email", password: "Password", loginBtn: "Sign In", registerBtn: "Create Account", waiting: "Please wait…", cancel: "Cancel" },
+  zh: { subtitle: "3D 创意市场", loginTab: "登录", registerTab: "注册", username: "用户名", email: "邮箱", password: "密码", loginBtn: "登录", registerBtn: "注册并登录", waiting: "请稍候…", cancel: "取消" },
+  es: { subtitle: "Mercado creativo 3D", loginTab: "Iniciar sesión", registerTab: "Registrarse", username: "Usuario", email: "Correo", password: "Contraseña", loginBtn: "Iniciar sesión", registerBtn: "Crear cuenta", waiting: "Por favor espera…", cancel: "Cancelar" },
+  pt: { subtitle: "Mercado criativo 3D", loginTab: "Entrar", registerTab: "Registar", username: "Utilizador", email: "Email", password: "Palavra-passe", loginBtn: "Entrar", registerBtn: "Criar conta", waiting: "Por favor aguarde…", cancel: "Cancelar" },
+  ja: { subtitle: "3Dクリエイティブマーケット", loginTab: "ログイン", registerTab: "新規登録", username: "ユーザー名", email: "メール", password: "パスワード", loginBtn: "ログイン", registerBtn: "アカウント作成", waiting: "お待ちください…", cancel: "キャンセル" },
+} as const;
 
 const T = "#00F5D4";
 
 export default function AuthModal() {
   const { showAuthModal, closeAuthModal, login, register } = useAuth();
+  const { lang } = useLang();
+  const a = AUTH_COPY[lang as keyof typeof AUTH_COPY] ?? AUTH_COPY.en;
   const [tab, setTab] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -26,7 +39,7 @@ export default function AuthModal() {
         await register(username, email, password);
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "操作失败，请重试");
+      setError(err instanceof Error ? err.message : COPY_ERR[lang as keyof typeof COPY_ERR] ?? COPY_ERR.en);
     } finally {
       setLoading(false);
     }
@@ -65,8 +78,8 @@ export default function AuthModal() {
           >
             {/* Logo */}
             <div className="text-center mb-6">
-              <div className="text-xl font-bold tracking-widest" style={{ color: T }}>WUUW</div>
-              <div className="text-xs mt-1" style={{ color: "#555" }}>3D 创意市场</div>
+              <div className="text-xl font-bold tracking-widest" style={{ color: T }}>WuuW</div>
+              <div className="text-xs mt-1" style={{ color: "#555" }}>{a.subtitle}</div>
             </div>
 
             {/* Tab 切换 */}
@@ -81,7 +94,7 @@ export default function AuthModal() {
                     color: tab === t ? "#050508" : "#555",
                   }}
                 >
-                  {t === "login" ? "登录" : "注册"}
+                  {t === "login" ? a.loginTab : a.registerTab}
                 </button>
               ))}
             </div>
@@ -89,7 +102,7 @@ export default function AuthModal() {
             <form onSubmit={handleSubmit} className="space-y-3">
               <input
                 style={inputStyle}
-                placeholder="用户名"
+                placeholder={a.username}
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 required
@@ -99,7 +112,7 @@ export default function AuthModal() {
                 <input
                   style={inputStyle}
                   type="email"
-                  placeholder="邮箱"
+                  placeholder={a.email}
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
@@ -108,7 +121,7 @@ export default function AuthModal() {
               <input
                 style={inputStyle}
                 type="password"
-                placeholder="密码"
+                placeholder={a.password}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
@@ -130,7 +143,7 @@ export default function AuthModal() {
                   cursor: loading ? "not-allowed" : "pointer",
                 }}
               >
-                {loading ? "请稍候..." : tab === "login" ? "登录" : "注册并登录"}
+                {loading ? a.waiting : tab === "login" ? a.loginBtn : a.registerBtn}
               </button>
             </form>
 
@@ -139,7 +152,7 @@ export default function AuthModal() {
               className="mt-4 w-full text-xs text-center"
               style={{ color: "#444" }}
             >
-              取消
+              {a.cancel}
             </button>
           </motion.div>
         </motion.div>
