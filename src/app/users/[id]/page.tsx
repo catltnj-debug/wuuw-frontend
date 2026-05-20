@@ -5,23 +5,29 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiGetUserProfile, apiGetExpLog, apiGetUserCreditsPublic,
          type ApiUserProfile, type ApiExpLog } from "@/lib/api";
+import { useLang } from "@/lib/language";
 
 const T = "#00F5D4";
 
-const ACTION_LABEL: Record<string, string> = {
-  post_discussion:  "发布讨论",
-  reply_discussion: "回复讨论",
-  like_given:       "为帖子点赞",
-  like_received:    "帖子被点赞",
-  task_claimed:     "认领任务",
-  task_completed:   "完成任务",
-  upload_asset:     "上传资产",
-  collab_completed: "完成协作",
-};
+function getActionLabel(lang: string): Record<string, string> {
+  const zh = lang === "zh";
+  return {
+    post_discussion:  zh ? "发布讨论"    : "Posted discussion",
+    reply_discussion: zh ? "回复讨论"    : "Replied to discussion",
+    like_given:       zh ? "为帖子点赞"  : "Liked a post",
+    like_received:    zh ? "帖子被点赞"  : "Post liked",
+    task_claimed:     zh ? "认领任务"    : "Claimed task",
+    task_completed:   zh ? "完成任务"    : "Completed task",
+    upload_asset:     zh ? "上传资产"    : "Uploaded asset",
+    collab_completed: zh ? "完成协作"    : "Completed collaboration",
+  };
+}
 
 export default function UserProfilePage() {
   const params = useParams();
   const userId = Number(params.id);
+  const { lang } = useLang();
+  const ACTION_LABEL = getActionLabel(lang);
 
   const [profile, setProfile] = useState<ApiUserProfile | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
@@ -53,12 +59,12 @@ export default function UserProfilePage() {
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)]" style={{ background: "#050508" }}>
-      <p style={{ color: "#555" }}>加载中…</p>
+      <p style={{ color: "#555" }}>{lang === "zh" ? "加载中…" : "Loading…"}</p>
     </div>
   );
   if (!profile) return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)]" style={{ background: "#050508" }}>
-      <p style={{ color: "#555" }}>用户不存在</p>
+      <p style={{ color: "#555" }}>{lang === "zh" ? "用户不存在" : "User not found"}</p>
     </div>
   );
 
@@ -109,8 +115,8 @@ export default function UserProfilePage() {
               <div className="flex justify-between text-xs mb-1" style={{ color: "#555" }}>
                 <span>{level.current_exp.toLocaleString()} EXP</span>
                 {expToNext != null
-                  ? <span>距下一级还差 {expToNext.toLocaleString()} EXP</span>
-                  : <span>满级</span>}
+                  ? <span>{lang === "zh" ? `距下一级还差 ${expToNext.toLocaleString()} EXP` : `${expToNext.toLocaleString()} EXP to next level`}</span>
+                  : <span>{lang === "zh" ? "满级" : "Max level"}</span>}
               </div>
               <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
                 <div className="h-full rounded-full transition-all duration-700"
@@ -119,7 +125,7 @@ export default function UserProfilePage() {
             </div>
 
             <p className="text-xs mt-2" style={{ color: "#3a3a3a" }}>
-              加入于 {new Date(profile.joined_at).toLocaleDateString("zh-CN")}
+              {lang === "zh" ? "加入于" : "Joined"} {new Date(profile.joined_at).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US")}
             </p>
           </div>
 
@@ -137,7 +143,7 @@ export default function UserProfilePage() {
         {/* ── 参与项目 ── */}
         {profile.projects.length > 0 && (
           <section>
-            <h2 className="text-sm font-semibold mb-3" style={{ color: "#666" }}>参与项目</h2>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "#666" }}>{lang === "zh" ? "参与项目" : "Projects"}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {profile.projects.map(p => (
                 <Link key={p.id} href={`/assets/${p.id}`}
@@ -158,7 +164,7 @@ export default function UserProfilePage() {
 
         {/* ── 经验记录 ── */}
         <section>
-          <h2 className="text-sm font-semibold mb-3" style={{ color: "#666" }}>经验记录</h2>
+          <h2 className="text-sm font-semibold mb-3" style={{ color: "#666" }}>{lang === "zh" ? "经验记录" : "EXP History"}</h2>
           {logLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -166,7 +172,7 @@ export default function UserProfilePage() {
               ))}
             </div>
           ) : logs.length === 0 ? (
-            <p className="text-sm py-8 text-center" style={{ color: "#3a3a3a" }}>暂无经验记录</p>
+            <p className="text-sm py-8 text-center" style={{ color: "#3a3a3a" }}>{lang === "zh" ? "暂无经验记录" : "No EXP history yet"}</p>
           ) : (
             <>
               <div className="space-y-2">
@@ -178,7 +184,7 @@ export default function UserProfilePage() {
                     </span>
                     <div className="flex items-center gap-4">
                       <span className="text-xs" style={{ color: "#555" }}>
-                        {new Date(log.created_at).toLocaleDateString("zh-CN")}
+                        {new Date(log.created_at).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US")}
                       </span>
                       <span className="text-sm font-semibold tabular-nums" style={{ color: T }}>
                         +{log.exp_gained}
@@ -194,15 +200,15 @@ export default function UserProfilePage() {
                   <button onClick={() => setLogPage(p => Math.max(1, p - 1))} disabled={logPage === 1}
                     className="px-3 py-1.5 rounded-lg text-xs border transition-all"
                     style={{ borderColor: "rgba(255,255,255,0.1)", color: logPage === 1 ? "#333" : "#777" }}>
-                    上一页
+                    {lang === "zh" ? "上一页" : "Prev"}
                   </button>
                   <span className="px-3 py-1.5 text-xs" style={{ color: "#555" }}>
-                    第 {logPage} 页 / 共 {Math.ceil(logTotal / 20)} 页
+                    {lang === "zh" ? `第 ${logPage} 页 / 共 ${Math.ceil(logTotal / 20)} 页` : `${logPage} / ${Math.ceil(logTotal / 20)}`}
                   </span>
                   <button onClick={() => setLogPage(p => p + 1)} disabled={logPage * 20 >= logTotal}
                     className="px-3 py-1.5 rounded-lg text-xs border transition-all"
                     style={{ borderColor: "rgba(255,255,255,0.1)", color: logPage * 20 >= logTotal ? "#333" : "#777" }}>
-                    下一页
+                    {lang === "zh" ? "下一页" : "Next"}
                   </button>
                 </div>
               )}

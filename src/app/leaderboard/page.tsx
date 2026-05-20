@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiGetLeaderboard, type ApiLeaderboardEntry } from "@/lib/api";
+import { useLang, COPY } from "@/lib/language";
 
 const T = "#00F5D4";
 
@@ -13,6 +14,8 @@ const RANK_STYLE: Record<number, { color: string; bg: string }> = {
 };
 
 export default function LeaderboardPage() {
+  const { lang } = useLang();
+  const L = COPY[lang].pages.leaderboard;
   const [entries, setEntries] = useState<ApiLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,8 +32,8 @@ export default function LeaderboardPage() {
 
         {/* ── 标题 ── */}
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold mb-1" style={{ color: "#eee" }}>经验值排行榜</h1>
-          <p className="text-sm" style={{ color: "#555" }}>社区贡献者综合排名 Top 50</p>
+          <h1 className="text-2xl font-bold mb-1" style={{ color: "#eee" }}>{L.title}</h1>
+          <p className="text-sm" style={{ color: "#555" }}>{L.subtitle}</p>
         </div>
 
         {/* ── 前三名卡片 ── */}
@@ -74,7 +77,7 @@ export default function LeaderboardPage() {
         ) : entries.length === 0 ? (
           <div className="text-center py-20" style={{ color: "#3a3a3a" }}>
             <div className="text-4xl mb-3">🏆</div>
-            <p className="text-sm">暂无数据</p>
+            <p className="text-sm">{lang === "zh" ? "暂无数据" : "No data yet"}</p>
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -126,7 +129,7 @@ export default function LeaderboardPage() {
                     <div className="flex items-center gap-3 mt-0.5">
                       <span className="text-xs" style={{ color: "#444" }}>{entry.level_name}</span>
                       <span className="text-xs" style={{ color: "#3a3a3a" }}>·</span>
-                      <span className="text-xs" style={{ color: "#444" }}>{entry.project_count} 个项目</span>
+                      <span className="text-xs" style={{ color: "#444" }}>{lang === "zh" ? `${entry.project_count} 个项目` : `${entry.project_count} project${entry.project_count !== 1 ? "s" : ""}`}</span>
                     </div>
                   </div>
 

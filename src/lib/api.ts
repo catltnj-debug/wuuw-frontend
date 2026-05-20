@@ -1002,3 +1002,174 @@ export async function apiAssistantReset(
   if (!res.ok) throw new Error(data.detail || "重置失败");
   return data;
 }
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+export interface ApiPaymentOrder {
+  id: number;
+  order_no: string;
+  package_name: string;
+  amount_usd: number;
+  credits_amount: number;
+  status: string;
+  created_at: string;
+  paid_at: string | null;
+}
+
+export async function apiGetPackages() {
+  const res = await fetch(`${API}/api/payments/packages`);
+  if (!res.ok) throw new Error("获取套餐失败");
+  return res.json() as Promise<{ key: string; name: string; usd: number; credits: number }[]>;
+}
+
+export async function apiCreateCheckout(body: {
+  package: string;
+  success_url: string;
+  cancel_url: string;
+}) {
+  const res = await fetch(`${API}/api/payments/credits/checkout`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "创建支付失败");
+  return data as { url: string; session_id: string; order_no: string };
+}
+
+export async function apiGetPaymentHistory(page = 1) {
+  const res = await fetch(`${API}/api/payments/history?page=${page}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("获取支付历史失败");
+  return res.json() as Promise<{ total: number; page: number; items: ApiPaymentOrder[] }>;
+}
+
+// ─── Moderation ───────────────────────────────────────────────────────────────
+export async function apiSubmitReport(body: {
+  content_type: string;
+  content_id: number;
+  reason: string;
+}) {
+  const res = await fetch(`${API}/api/moderation/report`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "举报失败");
+  return data;
+}
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+export interface ApiAdminStats {
+  user_count: number;
+  asset_count: number;
+  cert_count: number;
+  credits_circulation: number;
+  pending_reports: number;
+  total_revenue_usd: number;
+}
+
+export interface ApiAdminUser {
+  id: number;
+  username: string;
+  email: string;
+  tier: string;
+  is_admin: boolean;
+  is_banned: boolean;
+  ban_reason: string | null;
+  created_at: string;
+}
+
+export interface ApiAdminReport {
+  id: number;
+  reporter_id: number;
+  reporter_username: string | null;
+  content_type: string;
+  content_id: number;
+  reason: string;
+  status: string;
+  resolve_action: string | null;
+  created_at: string;
+}
+
+export async function apiAdminStats() {
+  const res = await fetch(`${API}/api/admin/stats`, { headers: authHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "获取统计失败");
+  return data as ApiAdminStats;
+}
+
+export async function apiAdminUsers(params?: { q?: string; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.page) qs.set("page", String(params.page));
+  const res = await fetch(`${API}/api/admin/users?${qs}`, { headers: authHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "获取用户失败");
+  return data as { total: number; page: number; items: ApiAdminUser[] };
+}
+
+export async function apiAdminBanUser(userId: number, banned: boolean, reason?: string) {
+  const res = await fetch(`${API}/api/admin/users/${userId}/ban`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ banned, reason }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "操作失败");
+  return data;
+}
+
+export async function apiAdminModels(params?: { q?: string; status?: string; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.status) qs.set("status", params.status);
+  if (params?.page) qs.set("page", String(params.page));
+  const res = await fetch(`${API}/api/admin/models?${qs}`, { headers: authHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "获取失败");
+  return data as { total: number; page: number; items: { id: number; asset_no: string; title: string; status: string; file_format: string; creator: string; created_at: string }[] };
+}
+
+export async function apiAdminSetModelStatus(assetId: number, status: string) {
+  const res = await fetch(`${API}/api/admin/models/${assetId}/status`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "操作失败");
+  return data;
+}
+
+export async function apiAdminReports(params?: { status?: string; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.page) qs.set("page", String(params.page));
+  const res = await fetch(`${API}/api/admin/reports?${qs}`, { headers: authHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "获取失败");
+  return data as { total: number; page: number; items: ApiAdminReport[] };
+}
+
+export async function apiAdminHandleReport(reportId: number, action: string, note?: string) {
+  const res = await fetch(`${API}/api/moderation/reports/${reportId}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ action, note }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "操作失败");
+  return data;
+}
+
+export async function apiAdminCerts(params?: { q?: string; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.page) qs.set("page", String(params.page));
+  const res = await fetch(`${API}/api/admin/certificates?${qs}`, { headers: authHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "获取失败");
+  return data as { total: number; page: number; items: { id: number; cert_no: string; asset_no: string | null; asset_title: string | null; file_hash: string; issued_at: string | null }[] };
+}

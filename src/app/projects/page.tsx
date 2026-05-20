@@ -4,16 +4,10 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { apiGetProjects, apiPostProject, ApiProject } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useLang, COPY } from "@/lib/language";
 
 const T = "#00F5D4";
 const BG = "#050508";
-
-const STATUS_TABS = [
-  { key: "", label: "全部" },
-  { key: "planning", label: "规划中" },
-  { key: "active", label: "进行中" },
-  { key: "completed", label: "已完成" },
-];
 
 const STATUS_COLOR: Record<string, string> = {
   planning: "#888",
@@ -21,12 +15,21 @@ const STATUS_COLOR: Record<string, string> = {
   completed: "#F5A623",
   cancelled: "#444",
 };
-const STATUS_LABEL: Record<string, string> = {
-  planning: "规划中", active: "进行中", completed: "已完成", cancelled: "已取消",
-};
 
 export default function ProjectsPage() {
   const { user } = useAuth();
+  const { lang } = useLang();
+  const L = COPY[lang].pages.projects;
+  const S = COPY[lang].status;
+  const STATUS_TABS = [
+    { key: "", label: COPY[lang].common.all },
+    { key: "planning", label: S.planning },
+    { key: "active", label: S.active },
+    { key: "completed", label: S.completed },
+  ];
+  const STATUS_LABEL: Record<string, string> = {
+    planning: S.planning, active: S.active, completed: S.completed, cancelled: S.cancelled,
+  };
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -60,7 +63,7 @@ export default function ProjectsPage() {
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
   async function handleCreate() {
-    if (!form.title.trim()) { setErr("项目名称不能为空"); return; }
+    if (!form.title.trim()) { setErr(lang === "zh" ? "项目名称不能为空" : "Project name required"); return; }
     setSubmitting(true); setErr("");
     try {
       const p = await apiPostProject({
@@ -73,7 +76,7 @@ export default function ProjectsPage() {
       setProjects(prev => [p, ...prev]);
       setTotal(t => t + 1);
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "创建失败");
+      setErr(e instanceof Error ? e.message : lang === "zh" ? "创建失败" : "Failed to create");
     } finally { setSubmitting(false); }
   }
 
@@ -83,8 +86,8 @@ export default function ProjectsPage() {
 
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "#eee" }}>Projects</h1>
-            <p className="text-sm mt-1" style={{ color: "#555" }}>多人协作、股份协议、里程碑管理</p>
+            <h1 className="text-2xl font-bold" style={{ color: "#eee" }}>{L.title}</h1>
+            <p className="text-sm mt-1" style={{ color: "#555" }}>{L.subtitle}</p>
           </div>
           {user && (
             <button
@@ -92,7 +95,7 @@ export default function ProjectsPage() {
               className="px-4 py-2 rounded-lg text-sm font-medium"
               style={{ background: "rgba(0,245,212,0.12)", color: T, border: `1px solid rgba(0,245,212,0.3)` }}
             >
-              + 新建项目
+              {L.create}
             </button>
           )}
         </div>
@@ -101,7 +104,7 @@ export default function ProjectsPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="搜索项目…"
+            placeholder={L.searchPlaceholder}
             className="flex-1 min-w-[200px] px-3 py-2 rounded-lg text-sm outline-none"
             style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "#ccc" }}
           />
@@ -121,9 +124,9 @@ export default function ProjectsPage() {
         </div>
 
         {loading ? (
-          <div className="text-center py-20" style={{ color: "#333" }}>加载中…</div>
+          <div className="text-center py-20" style={{ color: "#333" }}>{COPY[lang].common.loading}</div>
         ) : projects.length === 0 ? (
-          <div className="text-center py-20" style={{ color: "#333" }}>暂无项目</div>
+          <div className="text-center py-20" style={{ color: "#333" }}>{L.noProjects}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             {projects.map(p => (
@@ -144,7 +147,7 @@ export default function ProjectsPage() {
                 <div className="flex items-center justify-between" style={{ borderTop: "1px solid rgba(255,255,255,0.04)", paddingTop: 8 }}>
                   <span className="text-xs" style={{ color: "#444" }}>@{p.creator_username}</span>
                   <span className="text-xs" style={{ color: "#333" }}>
-                    👥 {p.members.length} 人 · {p.milestones.filter(m => m.completed).length}/{p.milestones.length} 里程碑
+                    👥 {L.memberCount(p.members.length)} · {L.milestoneCount(p.milestones.filter(m => m.completed).length, p.milestones.length)}
                   </span>
                 </div>
               </Link>
@@ -173,11 +176,11 @@ export default function ProjectsPage() {
           onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
           <div className="w-full max-w-lg mx-4 rounded-2xl p-6"
             style={{ background: "#0d0d12", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <h2 className="text-lg font-semibold mb-5" style={{ color: "#eee" }}>新建项目</h2>
+            <h2 className="text-lg font-semibold mb-5" style={{ color: "#eee" }}>{lang === "zh" ? "新建项目" : "New Project"}</h2>
             {[
-              { label: "项目名称 *", key: "title", placeholder: "简洁有力的项目名" },
-              { label: "简介", key: "description", placeholder: "项目目标与背景…" },
-              { label: "GitHub 链接", key: "github_url", placeholder: "https://github.com/…" },
+              { label: L.formTitle, key: "title", placeholder: lang === "zh" ? "简洁有力的项目名" : "A concise project name" },
+              { label: L.formDesc,  key: "description", placeholder: lang === "zh" ? "项目目标与背景…" : "Project goals and background…" },
+              { label: L.formGithub, key: "github_url", placeholder: "https://github.com/…" },
             ].map(({ label, key, placeholder }) => (
               <div key={key} className="mb-4">
                 <label className="text-xs mb-1 block" style={{ color: "#666" }}>{label}</label>
@@ -192,11 +195,11 @@ export default function ProjectsPage() {
             ))}
             {err && <p className="text-xs mb-3" style={{ color: "#f56" }}>{err}</p>}
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: "#666" }}>取消</button>
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: "#666" }}>{COPY[lang].common.cancel}</button>
               <button onClick={handleCreate} disabled={submitting}
                 className="px-5 py-2 rounded-lg text-sm font-medium"
                 style={{ background: "rgba(0,245,212,0.15)", color: T, border: `1px solid rgba(0,245,212,0.3)` }}>
-                {submitting ? "创建中…" : "创建"}
+                {submitting ? (lang === "zh" ? "创建中…" : "Creating…") : COPY[lang].common.create}
               </button>
             </div>
           </div>

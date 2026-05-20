@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react"
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
-import { useLang } from "@/lib/language";
+import { useLang, COPY } from "@/lib/language";
 import {
   apiGetAsset, apiGetZones, apiGetDiscussions,
   apiPostDiscussion, apiReplyDiscussion, apiLikeDiscussion,
@@ -27,9 +27,10 @@ const cardStyle: React.CSSProperties = {
   borderRadius: 16,
 };
 
-const TASK_STATUS_LABEL: Record<string, string> = {
-  open: "待认领", claimed: "已认领", in_progress: "进行中", done: "已完成",
-};
+function getTaskStatusLabel(lang: string): Record<string, string> {
+  const zh = lang === "zh";
+  return { open: zh ? "待认领" : "Open", claimed: zh ? "已认领" : "Claimed", in_progress: zh ? "进行中" : "In Progress", done: zh ? "已完成" : "Done" };
+}
 
 // ── Translation helpers ───────────────────────────────────────────────────────
 const LANG_FLAG: Record<string, string> = {
@@ -48,6 +49,7 @@ function fmtDuration(sec: number) {
 
 // ── Voice recorder ─────────────────────────────────────────────────────────────
 function VoiceRecorder({ onReady }: { onReady: (blob: Blob, dur: number) => void }) {
+  const { lang } = useLang();
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [blob, setBlob] = useState<Blob | null>(null);
@@ -73,7 +75,7 @@ function VoiceRecorder({ onReady }: { onReady: (blob: Blob, dur: number) => void
       setSeconds(0);
       timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
     } catch {
-      alert("无法访问麦克风，请检查权限设置");
+      alert(lang === "zh" ? "无法访问麦克风，请检查权限设置" : "Microphone access denied. Please check permissions.");
     }
   }
 
@@ -102,7 +104,7 @@ function VoiceRecorder({ onReady }: { onReady: (blob: Blob, dur: number) => void
     <button onClick={recording ? stop : start}
       className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs border transition-all"
       style={{ borderColor: recording ? "#f56" : "rgba(0,245,212,0.3)", color: recording ? "#f56" : "#777" }}>
-      {recording ? <>⏹ {fmtDuration(seconds)}</> : <>🎙️ 语音</>}
+      {recording ? <>⏹ {fmtDuration(seconds)}</> : <>🎙️ {lang === "zh" ? "语音" : "Voice"}</>}
     </button>
   );
 }
@@ -114,6 +116,9 @@ export default function AssetDetailPage() {
   const params = useParams();
   const assetId = Number(params.id);
   const { user, isLoggedIn } = useAuth();
+  const { lang } = useLang();
+  const A = COPY[lang].pages.assets;
+  const BM = COPY[lang].pages.tasks.bountyModal;
 
   const username = user?.username;
   const [asset, setAsset] = useState<ApiAssetDetail | null>(null);
@@ -149,10 +154,10 @@ export default function AssetDetailPage() {
 
   async function handlePostBounty() {
     const amount = parseFloat(bountyForm.amount);
-    if (!bountyForm.title.trim()) { setBountyErr("标题不能为空"); return; }
-    if (!amount || amount < 1) { setBountyErr("悬赏金额至少 1 Credits"); return; }
+    if (!bountyForm.title.trim()) { setBountyErr(lang === "zh" ? "标题不能为空" : "Title required"); return; }
+    if (!amount || amount < 1) { setBountyErr(lang === "zh" ? "悬赏金额至少 1 Credits" : "Minimum 1 Credit"); return; }
     if (myCredits !== null && amount > myCredits) {
-      setBountyErr(`Credits 不足（当前 ${myCredits.toFixed(1)}）`); return;
+      setBountyErr(lang === "zh" ? `Credits 不足（当前 ${myCredits.toFixed(1)}）` : `Insufficient credits (${myCredits.toFixed(1)})`); return;
     }
     setBountySubmitting(true); setBountyErr("");
     try {
@@ -161,7 +166,7 @@ export default function AssetDetailPage() {
       setBountyForm({ title: "", description: "", amount: "", deadline: "" });
       const bRes = await apiGetBounties({ asset_id: assetId });
       setAssetBounties(bRes.items);
-    } catch (e) { setBountyErr(e instanceof Error ? e.message : "发布失败"); }
+    } catch (e) { setBountyErr(e instanceof Error ? e.message : lang === "zh" ? "发布失败" : "Failed to post"); }
     finally { setBountySubmitting(false); }
   }
 
@@ -171,7 +176,7 @@ export default function AssetDetailPage() {
       await apiClaimBounty(bountyId);
       const bRes = await apiGetBounties({ asset_id: assetId });
       setAssetBounties(bRes.items);
-    } catch (e) { alert(e instanceof Error ? e.message : "认领失败"); }
+    } catch (e) { alert(e instanceof Error ? e.message : lang === "zh" ? "认领失败" : "Failed to claim"); }
     finally { setClaimingBountyId(null); }
   }
 
@@ -191,12 +196,12 @@ export default function AssetDetailPage() {
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)]" style={{ background: "#050508" }}>
-      <p style={{ color: "#555" }}>加载中…</p>
+      <p style={{ color: "#555" }}>{lang === "zh" ? "加载中…" : "Loading…"}</p>
     </div>
   );
   if (!asset) return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)]" style={{ background: "#050508" }}>
-      <p style={{ color: "#555" }}>资产不存在</p>
+      <p style={{ color: "#555" }}>{A.notExist}</p>
     </div>
   );
 
@@ -226,12 +231,12 @@ export default function AssetDetailPage() {
                 <button onClick={() => setShowBountyModal(true)}
                   className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap"
                   style={{ background: "rgba(245,166,35,0.12)", color: "#F5A623", border: "1px solid rgba(245,166,35,0.25)" }}>
-                  💰 发起悬赏
+                  {A.postBounty}
                 </button>
               )}
               {asset.latest_certificate && (
                 <div className="text-right">
-                  <p className="text-xs mb-1" style={{ color: "#555" }}>版权证书</p>
+                  <p className="text-xs mb-1" style={{ color: "#555" }}>{A.copyright}</p>
                   <p className="text-xs font-mono" style={{ color: "#00F5D4" }}>{asset.latest_certificate}</p>
                 </div>
               )}
@@ -242,11 +247,11 @@ export default function AssetDetailPage() {
         {/* ── 3D 预览 / 媒体 ── */}
         {asset.file_format === "GLB" || asset.file_format === "GLTF" ? (
           <div className="mb-8">
-            <p className="text-xs font-semibold mb-3" style={{ color: "#666" }}>3D 预览</p>
+            <p className="text-xs font-semibold mb-3" style={{ color: "#666" }}>{A.preview3d}</p>
             <Suspense fallback={
               <div className="rounded-2xl flex items-center justify-center"
                 style={{ height: 340, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                <span style={{ color: "#555", fontSize: 13 }}>加载预览组件…</span>
+                <span style={{ color: "#555", fontSize: 13 }}>{lang === "zh" ? "加载预览组件…" : "Loading preview…"}</span>
               </div>
             }>
               <ModelViewer
@@ -259,11 +264,11 @@ export default function AssetDetailPage() {
           <div className="mb-8 p-4 rounded-xl text-center"
             style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
             <p className="text-xs mb-2" style={{ color: "#555" }}>
-              {asset.file_format} 格式暂不支持浏览器预览
+              {asset.file_format} {A.noPreview}
             </p>
             <a href={`${API_BASE}/${asset.file_path}`} download
               className="text-xs underline" style={{ color: "#00F5D4" }}>
-              下载文件查看
+              {A.downloadView}
             </a>
           </div>
         ) : null}
@@ -271,17 +276,17 @@ export default function AssetDetailPage() {
         {/* ── 打印参数 ── */}
         {asset.tech_params && Object.values(asset.tech_params).some(v => v != null) && (
           <div className="mb-8 p-5 rounded-2xl" style={cardStyle}>
-            <p className="text-xs font-semibold mb-4" style={{ color: "#666" }}>打印参数</p>
+            <p className="text-xs font-semibold mb-4" style={{ color: "#666" }}>{A.printParams}</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
-                { label: "材料", value: asset.tech_params.material },
-                { label: "喷嘴", value: asset.tech_params.nozzle_size ? `${asset.tech_params.nozzle_size} mm` : null },
-                { label: "层高", value: asset.tech_params.layer_height ? `${asset.tech_params.layer_height} mm` : null },
-                { label: "填充率", value: asset.tech_params.infill_pct != null ? `${asset.tech_params.infill_pct}%` : null },
-                { label: "重量", value: asset.tech_params.weight_g ? `${asset.tech_params.weight_g} g` : null },
-                { label: "尺寸", value: asset.tech_params.dim_x ? `${asset.tech_params.dim_x}×${asset.tech_params.dim_y}×${asset.tech_params.dim_z} mm` : null },
-                { label: "支撑", value: asset.tech_params.support_required != null ? (asset.tech_params.support_required ? "需要" : "不需要") : null },
-                { label: "打印时间", value: asset.tech_params.print_time_min ? `${Math.floor(asset.tech_params.print_time_min / 60)}h${asset.tech_params.print_time_min % 60}m` : null },
+                { label: A.params.material, value: asset.tech_params.material },
+                { label: A.params.nozzle, value: asset.tech_params.nozzle_size ? `${asset.tech_params.nozzle_size} mm` : null },
+                { label: A.params.layer, value: asset.tech_params.layer_height ? `${asset.tech_params.layer_height} mm` : null },
+                { label: A.params.infill, value: asset.tech_params.infill_pct != null ? `${asset.tech_params.infill_pct}%` : null },
+                { label: A.params.weight, value: asset.tech_params.weight_g ? `${asset.tech_params.weight_g} g` : null },
+                { label: A.params.size, value: asset.tech_params.dim_x ? `${asset.tech_params.dim_x}×${asset.tech_params.dim_y}×${asset.tech_params.dim_z} mm` : null },
+                { label: A.params.support, value: asset.tech_params.support_required != null ? (asset.tech_params.support_required ? A.params.yes : A.params.no) : null },
+                { label: A.params.printTime, value: asset.tech_params.print_time_min ? `${Math.floor(asset.tech_params.print_time_min / 60)}h${asset.tech_params.print_time_min % 60}m` : null },
               ].filter(p => p.value != null).map(p => (
                 <div key={p.label} className="p-3 rounded-xl"
                   style={{ background: "rgba(255,255,255,0.03)" }}>
@@ -292,7 +297,7 @@ export default function AssetDetailPage() {
             </div>
             {asset.tech_params.assembly_notes && (
               <div className="mt-3 p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
-                <p className="text-xs mb-0.5" style={{ color: "#555" }}>组装说明</p>
+                <p className="text-xs mb-0.5" style={{ color: "#555" }}>{A.params.assembly}</p>
                 <p className="text-sm" style={{ color: "#ccc" }}>{asset.tech_params.assembly_notes}</p>
               </div>
             )}
@@ -339,7 +344,7 @@ export default function AssetDetailPage() {
         {/* ── 相关悬赏 ── */}
         {assetBounties.length > 0 && (
           <div className="mt-8">
-            <p className="text-xs font-semibold mb-3" style={{ color: "#666" }}>相关悬赏</p>
+            <p className="text-xs font-semibold mb-3" style={{ color: "#666" }}>{A.relatedBounties}</p>
             <div className="space-y-2">
               {assetBounties.map(b => (
                 <AssetBountyRow key={b.id} bounty={b} userId={user?.id} isLoggedIn={isLoggedIn}
@@ -358,23 +363,23 @@ export default function AssetDetailPage() {
         onClick={e => { if (e.target === e.currentTarget) setShowBountyModal(false); }}>
         <div className="w-full max-w-md rounded-2xl p-6" style={{ background: "#0d0d12", border: "1px solid rgba(245,166,35,0.2)" }}>
           <div className="flex items-center justify-between mb-5">
-            <h2 className="font-semibold" style={{ color: "#eee" }}>💰 发起悬赏</h2>
+            <h2 className="font-semibold" style={{ color: "#eee" }}>{A.postBounty}</h2>
             {myCredits !== null && (
-              <span className="text-xs" style={{ color: "#666" }}>余额：<span style={{ color: T }}>{myCredits.toFixed(1)}</span> Credits</span>
+              <span className="text-xs" style={{ color: "#666" }}>{BM.balance}: <span style={{ color: T }}>{myCredits.toFixed(1)}</span> Credits</span>
             )}
           </div>
           <div className="space-y-3">
             <input value={bountyForm.title} onChange={e => setBountyForm(f => ({ ...f, title: e.target.value }))}
-              placeholder="悬赏标题 *"
+              placeholder={BM.titleField}
               className="w-full px-3 py-2 rounded-xl text-sm"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
             <textarea rows={3} value={bountyForm.description} onChange={e => setBountyForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="描述需求（可选）"
+              placeholder={BM.descField}
               className="w-full px-3 py-2 rounded-xl text-sm resize-none"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
             <div className="flex gap-3">
               <input type="number" min="1" value={bountyForm.amount} onChange={e => setBountyForm(f => ({ ...f, amount: e.target.value }))}
-                placeholder="金额 (Credits) *"
+                placeholder={BM.amountField}
                 className="flex-1 px-3 py-2 rounded-xl text-sm"
                 style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
               <input type="date" value={bountyForm.deadline} onChange={e => setBountyForm(f => ({ ...f, deadline: e.target.value }))}
@@ -387,12 +392,12 @@ export default function AssetDetailPage() {
             <button onClick={() => setShowBountyModal(false)}
               className="flex-1 py-2 rounded-xl text-sm border"
               style={{ borderColor: "rgba(255,255,255,0.1)", color: "#666" }}>
-              取消
+              {BM.cancel}
             </button>
             <button onClick={handlePostBounty} disabled={bountySubmitting}
               className="flex-1 py-2 rounded-xl text-sm font-semibold"
               style={{ background: bountySubmitting ? "rgba(245,166,35,0.3)" : "#F5A623", color: "#050508" }}>
-              {bountySubmitting ? "发布中…" : "发布悬赏"}
+              {bountySubmitting ? BM.submitting : BM.submit}
             </button>
           </div>
         </div>
@@ -442,7 +447,7 @@ function ZonePanel({
         setTimeout(() => setLangHint(null), 4000);
       }
       onRefresh();
-    } catch (e) { setErr(e instanceof Error ? e.message : "发帖失败"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : lang === "zh" ? "发帖失败" : "Post failed"); }
     finally { setPosting(false); }
   }
 
@@ -451,7 +456,7 @@ function ZonePanel({
     try {
       await apiSummarize(zone.id);
       onRefresh();
-    } catch (e) { setErr(e instanceof Error ? e.message : "生成失败"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : lang === "zh" ? "生成失败" : "Failed to generate"); }
     finally { setSummarizing(false); }
   }
 
@@ -463,18 +468,18 @@ function ZonePanel({
           {langHint && (
             <div className="mb-2 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5"
               style={{ background: "rgba(245,166,35,0.08)", border: "1px solid rgba(245,166,35,0.2)", color: "#F5A623" }}>
-              {LANG_FLAG[langHint] ?? "🌐"} 检测到您使用 {LANG_NAME[langHint] ?? langHint} 发帖
+              {LANG_FLAG[langHint] ?? "🌐"} {lang === "zh" ? `检测到您使用 ${LANG_NAME[langHint] ?? langHint} 发帖` : `Detected language: ${LANG_NAME[langHint] ?? langHint}`}
             </div>
           )}
           <textarea rows={3} value={postText} onChange={e => setPostText(e.target.value)}
-            placeholder={`在${zone.zone_name}发表你的看法…`}
+            placeholder={lang === "zh" ? `在${zone.zone_name}发表你的看法…` : `Share your thoughts in ${zone.zone_name}…`}
             className="w-full text-sm rounded-xl p-3 resize-none mb-2"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
           {voiceBlob && (
             <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
               style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.2)" }}>
               <span style={{ color: T }}>🎙️ {fmtDuration(voiceBlob.dur)}</span>
-              <span className="flex-1" style={{ color: "#555" }}>录音已附加</span>
+              <span className="flex-1" style={{ color: "#555" }}>{lang === "zh" ? "录音已附加" : "Voice attached"}</span>
               <button onClick={() => setVoiceBlob(null)} style={{ color: "#555" }}>✕</button>
             </div>
           )}
@@ -485,12 +490,12 @@ function ZonePanel({
               <button onClick={handleSummarize} disabled={summarizing}
                 className="px-3 py-1.5 rounded-xl text-xs border transition-all"
                 style={{ borderColor: "rgba(0,245,212,0.3)", color: summarizing ? "#444" : T }}>
-                {summarizing ? "生成中…" : "✦ AI总结"}
+                {summarizing ? (lang === "zh" ? "生成中…" : "Generating…") : (lang === "zh" ? "✦ AI总结" : "✦ AI Summary")}
               </button>
               <button onClick={handlePost} disabled={(!postText.trim() && !voiceBlob) || posting || uploadingVoice}
                 className="px-4 py-1.5 rounded-xl text-xs font-semibold transition-all"
                 style={{ background: posting || (!postText.trim() && !voiceBlob) ? "rgba(0,245,212,0.3)" : T, color: "#050508" }}>
-                {posting ? "发送中…" : uploadingVoice ? "上传中…" : "发帖"}
+                {posting ? (lang === "zh" ? "发送中…" : "Sending…") : uploadingVoice ? (lang === "zh" ? "上传中…" : "Uploading…") : (lang === "zh" ? "发帖" : "Post")}
               </button>
             </div>
           </div>
@@ -505,7 +510,7 @@ function ZonePanel({
       {/* 任务列表 */}
       {content.tasks.length > 0 && (
         <div>
-          <p className="text-xs font-semibold mb-3" style={{ color: "#666" }}>本区任务</p>
+          <p className="text-xs font-semibold mb-3" style={{ color: "#666" }}>{lang === "zh" ? "本区任务" : "Zone Tasks"}</p>
           <div className="space-y-2">
             {content.tasks.map(t => (
               <TaskRow key={t.id} task={t} username={username} isLoggedIn={isLoggedIn} onRefresh={onRefresh} />
@@ -518,7 +523,7 @@ function ZonePanel({
       {content.discussions.length === 0 ? (
         <div className="text-center py-12" style={{ color: "#3a3a3a" }}>
           <div className="text-3xl mb-2">💬</div>
-          <p className="text-sm">暂无讨论，来第一个发帖吧</p>
+          <p className="text-sm">{lang === "zh" ? "暂无讨论，来第一个发帖吧" : "No discussions yet — be the first to post!"}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -602,7 +607,7 @@ function DiscussionCard({
           {showTranslated && translated ? translated : disc.content}
         </p>
         {showTranslated && translated && (
-          <p className="text-xs mb-2" style={{ color: "#444" }}>— 翻译自原文</p>
+          <p className="text-xs mb-2" style={{ color: "#444" }}>{lang === "zh" ? "— 翻译自原文" : "— Translated"}</p>
         )}
         <div className="flex items-center gap-4 mt-2">
           <button onClick={handleLike} disabled={!isLoggedIn || liking || disc.user_id === userId}
@@ -616,27 +621,27 @@ function DiscussionCard({
             className="text-xs transition-all" style={{ color: showTranslated ? T : "#555" }}
             onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = T)}
             onMouseLeave={e => { if (!showTranslated) (e.currentTarget as HTMLElement).style.color = "#555"; }}>
-            {translating ? "翻译中…" : showTranslated ? "🌐 查看原文" : "🌐 翻译"}
+            {translating ? (lang === "zh" ? "翻译中…" : "Translating…") : showTranslated ? (lang === "zh" ? "🌐 查看原文" : "🌐 Original") : (lang === "zh" ? "🌐 翻译" : "🌐 Translate")}
           </button>
           {isLoggedIn && depth === 0 && (
             <button onClick={() => setShowReply(!showReply)}
               className="text-xs transition-all" style={{ color: "#555" }}
               onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = T)}
               onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = "#555")}>
-              回复
+              {lang === "zh" ? "回复" : "Reply"}
             </button>
           )}
         </div>
         {showReply && (
           <div className="mt-3 flex gap-2">
             <input value={replyText} onChange={e => setReplyText(e.target.value)}
-              placeholder="写下回复…" onKeyDown={e => e.key === "Enter" && handleReply()}
+              placeholder={lang === "zh" ? "写下回复…" : "Write a reply…"} onKeyDown={e => e.key === "Enter" && handleReply()}
               className="flex-1 text-sm rounded-lg px-3 py-1.5"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
             <button onClick={handleReply} disabled={!replyText.trim() || replying}
               className="px-3 py-1.5 rounded-lg text-xs font-medium"
               style={{ background: T, color: "#050508" }}>
-              发送
+              {lang === "zh" ? "发送" : "Send"}
             </button>
           </div>
         )}
@@ -655,6 +660,7 @@ function SummaryPanel({ summary, userId, isLoggedIn, onRefresh }: {
   isLoggedIn: boolean;
   onRefresh: () => void;
 }) {
+  const { lang } = useLang();
   const [confirming, setConfirming] = useState(false);
   const [generating, setGenerating] = useState(false);
   const alreadyConfirmed = userId ? summary.confirmed_user_ids?.includes(userId) : false;
@@ -662,27 +668,27 @@ function SummaryPanel({ summary, userId, isLoggedIn, onRefresh }: {
   async function handleConfirm() {
     setConfirming(true);
     try { await apiConfirmSummary(summary.id); onRefresh(); }
-    catch (e) { alert(e instanceof Error ? e.message : "确认失败"); }
+    catch (e) { alert(e instanceof Error ? e.message : (lang === "zh" ? "确认失败" : "Failed to confirm")); }
     finally { setConfirming(false); }
   }
 
   async function handleGenerate() {
     setGenerating(true);
     try { await apiGenerateTaskFromSummary(summary.id); onRefresh(); }
-    catch (e) { alert(e instanceof Error ? e.message : "生成失败"); }
+    catch (e) { alert(e instanceof Error ? e.message : (lang === "zh" ? "生成失败" : "Failed to generate")); }
     finally { setGenerating(false); }
   }
 
   return (
     <div className="p-4 rounded-2xl" style={{ background: "rgba(0,245,212,0.04)", border: "1px solid rgba(0,245,212,0.12)" }}>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs font-bold" style={{ color: T }}>✦ AI 总结</span>
+        <span className="text-xs font-bold" style={{ color: T }}>{lang === "zh" ? "✦ AI 总结" : "✦ AI Summary"}</span>
         <span className="text-xs px-2 py-0.5 rounded-full"
           style={{ background: summary.status === "confirmed" ? "rgba(0,245,212,0.1)" : "rgba(255,166,35,0.1)", color: summary.status === "confirmed" ? T : "#F5A623" }}>
-          {summary.status === "confirmed" ? "已确认" : "待确认"}
+          {summary.status === "confirmed" ? (lang === "zh" ? "已确认" : "Confirmed") : (lang === "zh" ? "待确认" : "Pending")}
         </span>
         <span className="text-xs ml-auto" style={{ color: "#555" }}>
-          {summary.confirm_count} / {summary.confirm_threshold} 人确认
+          {lang === "zh" ? `${summary.confirm_count} / ${summary.confirm_threshold} 人确认` : `${summary.confirm_count} / ${summary.confirm_threshold} confirmed`}
         </span>
       </div>
       <p className="text-sm leading-relaxed mb-4 whitespace-pre-line" style={{ color: "#bbb" }}>{summary.content}</p>
@@ -691,21 +697,21 @@ function SummaryPanel({ summary, userId, isLoggedIn, onRefresh }: {
           <button onClick={handleConfirm} disabled={confirming}
             className="px-4 py-1.5 rounded-xl text-xs font-medium transition-all"
             style={{ background: "rgba(0,245,212,0.1)", color: T, border: "1px solid rgba(0,245,212,0.2)" }}>
-            {confirming ? "确认中…" : "✓ 确认此总结"}
+            {confirming ? (lang === "zh" ? "确认中…" : "Confirming…") : (lang === "zh" ? "✓ 确认此总结" : "✓ Confirm Summary")}
           </button>
         )}
         {isLoggedIn && summary.status === "confirmed" && !summary.task_generated && (
           <button onClick={handleGenerate} disabled={generating}
             className="px-4 py-1.5 rounded-xl text-xs font-medium transition-all"
             style={{ background: T, color: "#050508" }}>
-            {generating ? "生成中…" : "生成任务 →"}
+            {generating ? (lang === "zh" ? "生成中…" : "Generating…") : (lang === "zh" ? "生成任务 →" : "Generate Tasks →")}
           </button>
         )}
         {summary.task_generated && (
-          <span className="text-xs" style={{ color: "#555" }}>✓ 任务已生成</span>
+          <span className="text-xs" style={{ color: "#555" }}>{lang === "zh" ? "✓ 任务已生成" : "✓ Tasks generated"}</span>
         )}
         {alreadyConfirmed && summary.status !== "confirmed" && (
-          <span className="text-xs" style={{ color: "#555" }}>✓ 已确认，等待其他人</span>
+          <span className="text-xs" style={{ color: "#555" }}>{lang === "zh" ? "✓ 已确认，等待其他人" : "✓ Confirmed — waiting for others"}</span>
         )}
       </div>
     </div>
@@ -719,19 +725,21 @@ function TaskRow({ task, username, isLoggedIn, onRefresh }: {
   isLoggedIn: boolean;
   onRefresh: () => void;
 }) {
+  const { lang } = useLang();
+  const TASK_STATUS_LABEL = getTaskStatusLabel(lang);
   const [acting, setActing] = useState(false);
 
   async function handleClaim() {
     setActing(true);
     try { await apiClaimTask(task.id); onRefresh(); }
-    catch (e) { alert(e instanceof Error ? e.message : "抢单失败"); }
+    catch (e) { alert(e instanceof Error ? e.message : (lang === "zh" ? "抢单失败" : "Failed to claim")); }
     finally { setActing(false); }
   }
 
   async function handleComplete() {
     setActing(true);
     try { await apiCompleteDiscTask(task.id); onRefresh(); }
-    catch (e) { alert(e instanceof Error ? e.message : "操作失败"); }
+    catch (e) { alert(e instanceof Error ? e.message : (lang === "zh" ? "操作失败" : "Operation failed")); }
     finally { setActing(false); }
   }
 
@@ -741,7 +749,7 @@ function TaskRow({ task, username, isLoggedIn, onRefresh }: {
     <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
       <div className="flex-1 min-w-0">
         <p className="text-sm truncate" style={{ color: "#ddd" }}>{task.title}</p>
-        {task.assignee && <p className="text-xs mt-0.5" style={{ color: "#555" }}>认领人：{task.assignee}</p>}
+        {task.assignee && <p className="text-xs mt-0.5" style={{ color: "#555" }}>{lang === "zh" ? "认领人：" : "Assignee: "}{task.assignee}</p>}
       </div>
       <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0"
         style={{ background: `${TASK_STATUS_COLOR[task.status] ?? "#666"}18`, color: TASK_STATUS_COLOR[task.status] ?? "#666" }}>
@@ -751,14 +759,14 @@ function TaskRow({ task, username, isLoggedIn, onRefresh }: {
         <button onClick={handleClaim} disabled={acting}
           className="px-3 py-1 rounded-lg text-xs font-medium flex-shrink-0"
           style={{ background: T, color: "#050508" }}>
-          抢单
+          {lang === "zh" ? "抢单" : "Claim"}
         </button>
       )}
       {isLoggedIn && task.status === "claimed" && isAssignee && (
         <button onClick={handleComplete} disabled={acting}
           className="px-3 py-1 rounded-lg text-xs font-medium flex-shrink-0"
           style={{ background: "rgba(0,245,212,0.1)", color: T }}>
-          完成
+          {lang === "zh" ? "完成" : "Done"}
         </button>
       )}
     </div>
@@ -769,10 +777,6 @@ function TaskRow({ task, username, isLoggedIn, onRefresh }: {
 const BOUNTY_STATUS_COLOR: Record<string, string> = {
   open: T, claimed: "#F5A623", completed: "#888", cancelled: "#444",
 };
-const BOUNTY_STATUS_LABEL: Record<string, string> = {
-  open: "开放中", claimed: "已认领", completed: "已完成", cancelled: "已取消",
-};
-
 function AssetBountyRow({ bounty, userId, isLoggedIn, claiming, onClaim }: {
   bounty: ApiBounty;
   userId?: number;
@@ -780,6 +784,10 @@ function AssetBountyRow({ bounty, userId, isLoggedIn, claiming, onClaim }: {
   claiming: boolean;
   onClaim: () => void;
 }) {
+  const { lang } = useLang();
+  const BOUNTY_STATUS_LABEL: Record<string, string> = lang === "zh"
+    ? { open: "开放中", claimed: "已认领", completed: "已完成", cancelled: "已取消" }
+    : { open: "Open", claimed: "Claimed", completed: "Completed", cancelled: "Cancelled" };
   const statusColor = BOUNTY_STATUS_COLOR[bounty.status] ?? "#777";
   const isOwner = userId === bounty.creator_id;
 
@@ -791,7 +799,7 @@ function AssetBountyRow({ bounty, userId, isLoggedIn, claiming, onClaim }: {
         <p className="text-sm truncate" style={{ color: "#ddd" }}>{bounty.title}</p>
         <p className="text-xs mt-0.5" style={{ color: "#555" }}>
           <span style={{ color: "#F5A623", fontWeight: 600 }}>{bounty.amount} Credits</span>
-          {bounty.deadline && <span> · 截止 {bounty.deadline}</span>}
+          {bounty.deadline && <span> · {lang === "zh" ? "截止" : "Due"} {bounty.deadline}</span>}
           <span> · by {bounty.creator_username}</span>
         </p>
       </div>
@@ -803,7 +811,7 @@ function AssetBountyRow({ bounty, userId, isLoggedIn, claiming, onClaim }: {
         <button onClick={onClaim} disabled={claiming}
           className="px-3 py-1 rounded-lg text-xs font-semibold flex-shrink-0"
           style={{ background: claiming ? "rgba(245,166,35,0.3)" : "#F5A623", color: "#050508" }}>
-          {claiming ? "…" : "认领"}
+          {claiming ? "…" : (lang === "zh" ? "认领" : "Claim")}
         </button>
       )}
     </div>

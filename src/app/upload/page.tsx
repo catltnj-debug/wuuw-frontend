@@ -4,18 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { useLang } from "@/lib/language";
 import { apiUploadAsset, apiUploadMedia, apiGetCategories, apiPatchTechParams, type ApiCategory } from "@/lib/api";
 
 const T = "#00F5D4";
 
-const MATERIALS = ["PLA", "ABS", "PETG", "Resin", "TPU", "其他"];
 const NOZZLE_SIZES = ["0.2", "0.4", "0.6", "0.8"];
-const MEDIA_KINDS = [
-  { value: "image", label: "图片" },
-  { value: "animation", label: "动图/渲染" },
-  { value: "video", label: "演示视频" },
-  { value: "usage_video", label: "使用视频" },
-];
 
 const inputStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.04)",
@@ -58,8 +52,18 @@ interface UploadResult {
 
 export default function UploadPage() {
   const { isLoggedIn, openAuthModal } = useAuth();
+  const { lang } = useLang();
   const router = useRouter();
+  const zh = lang === "zh";
   const [step, setStep] = useState(1);
+
+  const MATERIALS = ["PLA", "ABS", "PETG", "Resin", "TPU", zh ? "其他" : "Other"];
+  const MEDIA_KINDS = [
+    { value: "image", label: zh ? "图片" : "Image" },
+    { value: "animation", label: zh ? "动图/渲染" : "Animation/Render" },
+    { value: "video", label: zh ? "演示视频" : "Demo Video" },
+    { value: "usage_video", label: zh ? "使用视频" : "Usage Video" },
+  ];
 
   // Step 1
   const [title, setTitle] = useState("");
@@ -98,17 +102,31 @@ export default function UploadPage() {
 
   function buildDescription() {
     const params: string[] = [];
-    if (tech.material) params.push(`材料：${tech.material}`);
-    if (tech.weight_g) params.push(`预估重量：${tech.weight_g}g`);
-    if (tech.print_time_min) params.push(`打印时间：${tech.print_time_min}分钟`);
-    if (tech.nozzle_mm) params.push(`推荐喷头：${tech.nozzle_mm}mm`);
-    if (tech.dim_x && tech.dim_y && tech.dim_z)
-      params.push(`尺寸：${tech.dim_x}×${tech.dim_y}×${tech.dim_z}mm`);
-    if (tech.layer_height) params.push(`层高：${tech.layer_height}mm`);
-    if (tech.infill_pct) params.push(`填充率：${tech.infill_pct}%`);
-    params.push(`需要支撑：${tech.support_required ? "是" : "否"}`);
-    if (tech.assembly_notes) params.push(`安装说明：${tech.assembly_notes}`);
-    return description + (params.length ? (description ? "\n\n" : "") + "## 打印参数\n" + params.map(p => `- ${p}`).join("\n") : "");
+    if (zh) {
+      if (tech.material) params.push(`材料：${tech.material}`);
+      if (tech.weight_g) params.push(`预估重量：${tech.weight_g}g`);
+      if (tech.print_time_min) params.push(`打印时间：${tech.print_time_min}分钟`);
+      if (tech.nozzle_mm) params.push(`推荐喷头：${tech.nozzle_mm}mm`);
+      if (tech.dim_x && tech.dim_y && tech.dim_z)
+        params.push(`尺寸：${tech.dim_x}×${tech.dim_y}×${tech.dim_z}mm`);
+      if (tech.layer_height) params.push(`层高：${tech.layer_height}mm`);
+      if (tech.infill_pct) params.push(`填充率：${tech.infill_pct}%`);
+      params.push(`需要支撑：${tech.support_required ? "是" : "否"}`);
+      if (tech.assembly_notes) params.push(`安装说明：${tech.assembly_notes}`);
+      return description + (params.length ? (description ? "\n\n" : "") + "## 打印参数\n" + params.map(p => `- ${p}`).join("\n") : "");
+    } else {
+      if (tech.material) params.push(`Material: ${tech.material}`);
+      if (tech.weight_g) params.push(`Est. weight: ${tech.weight_g}g`);
+      if (tech.print_time_min) params.push(`Print time: ${tech.print_time_min} min`);
+      if (tech.nozzle_mm) params.push(`Nozzle: ${tech.nozzle_mm}mm`);
+      if (tech.dim_x && tech.dim_y && tech.dim_z)
+        params.push(`Dimensions: ${tech.dim_x}×${tech.dim_y}×${tech.dim_z}mm`);
+      if (tech.layer_height) params.push(`Layer height: ${tech.layer_height}mm`);
+      if (tech.infill_pct) params.push(`Infill: ${tech.infill_pct}%`);
+      params.push(`Supports required: ${tech.support_required ? "Yes" : "No"}`);
+      if (tech.assembly_notes) params.push(`Assembly notes: ${tech.assembly_notes}`);
+      return description + (params.length ? (description ? "\n\n" : "") + "## Print Parameters\n" + params.map(p => `- ${p}`).join("\n") : "");
+    }
   }
 
   function addMediaFile(file: File) {
@@ -141,7 +159,6 @@ export default function UploadPage() {
       );
       setUploadStep(1);
 
-      // save tech params to proper DB columns
       await apiPatchTechParams(uploadResult.asset_id, {
         material: tech.material || null,
         nozzle_size: tech.nozzle_mm ? parseFloat(tech.nozzle_mm) : null,
@@ -154,7 +171,7 @@ export default function UploadPage() {
         support_required: tech.support_required,
         assembly_notes: tech.assembly_notes || null,
         print_time_min: tech.print_time_min ? parseInt(tech.print_time_min) : null,
-      }).catch(() => {}); // non-fatal
+      }).catch(() => {});
 
       for (const mf of mediaFiles) {
         await apiUploadMedia(uploadResult.asset_id, mf.file, mf.kind);
@@ -167,7 +184,7 @@ export default function UploadPage() {
         certificate_no: uploadResult.certificate_no,
       });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "上传失败，请重试");
+      setError(err instanceof Error ? err.message : (zh ? "上传失败，请重试" : "Upload failed, please try again"));
     } finally {
       setUploading(false);
     }
@@ -186,25 +203,25 @@ export default function UploadPage() {
       <div style={{ background: "#050508", minHeight: "calc(100vh - 64px)" }}>
         <div className="max-w-lg mx-auto px-6 py-20 text-center">
           <div className="text-6xl mb-6">✦</div>
-          <h2 className="text-2xl font-bold mb-2" style={{ color: "#eee" }}>模型已发布！</h2>
+          <h2 className="text-2xl font-bold mb-2" style={{ color: "#eee" }}>{zh ? "模型已发布！" : "Model published!"}</h2>
           <p className="text-sm mb-1" style={{ color: "#666" }}>
-            资产编号：<span className="font-mono" style={{ color: T }}>{result.asset_no}</span>
+            {zh ? "资产编号：" : "Asset ID: "}<span className="font-mono" style={{ color: T }}>{result.asset_no}</span>
           </p>
           {result.certificate_no && (
             <p className="text-sm mb-8" style={{ color: "#666" }}>
-              版权证书：<span className="font-mono" style={{ color: "#BF5FFF" }}>{result.certificate_no}</span>
+              {zh ? "版权证书：" : "Copyright Certificate: "}<span className="font-mono" style={{ color: "#BF5FFF" }}>{result.certificate_no}</span>
             </p>
           )}
           <div className="flex gap-3 justify-center">
             <Link href={`/assets/${result.asset_id}`}
               className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all"
               style={{ background: T, color: "#050508" }}>
-              查看详情
+              {zh ? "查看详情" : "View Details"}
             </Link>
             <button onClick={resetAll}
               className="px-6 py-2.5 rounded-xl text-sm border transition-all"
               style={{ borderColor: "rgba(255,255,255,0.1)", color: "#777" }}>
-              再上传一个
+              {zh ? "再上传一个" : "Upload Another"}
             </button>
           </div>
         </div>
@@ -212,13 +229,15 @@ export default function UploadPage() {
     );
   }
 
-  const steps = ["基本信息", "3D文件 & 参数", "配图媒体"];
+  const steps = zh
+    ? ["基本信息", "3D文件 & 参数", "配图媒体"]
+    : ["Basic Info", "3D File & Params", "Media"];
 
   return (
     <div style={{ background: "#050508", minHeight: "calc(100vh - 64px)" }}>
       <div className="max-w-2xl mx-auto px-6 py-10">
-        <h1 className="text-2xl font-bold mb-1" style={{ color: "#eee" }}>上传模型</h1>
-        <p className="text-sm mb-8" style={{ color: "#555" }}>分享你的设计，自动生成版权证书</p>
+        <h1 className="text-2xl font-bold mb-1" style={{ color: "#eee" }}>{zh ? "上传模型" : "Upload Model"}</h1>
+        <p className="text-sm mb-8" style={{ color: "#555" }}>{zh ? "分享你的设计，自动生成版权证书" : "Share your design — copyright certificate generated automatically"}</p>
 
         {/* Step indicator */}
         <div className="flex items-center gap-0 mb-10">
@@ -252,32 +271,32 @@ export default function UploadPage() {
         {step === 1 && (
           <div className="space-y-4">
             <div>
-              <label style={labelStyle}>模型名称 *</label>
+              <label style={labelStyle}>{zh ? "模型名称 *" : "Model Name *"}</label>
               <input value={title} onChange={e => setTitle(e.target.value)}
-                placeholder="例如：可拆卸手机支架"
+                placeholder={zh ? "例如：可拆卸手机支架" : "e.g. Detachable phone stand"}
                 className="w-full px-4 py-2.5 text-sm" style={inputStyle} />
             </div>
 
             <div>
-              <label style={labelStyle}>描述</label>
+              <label style={labelStyle}>{zh ? "描述" : "Description"}</label>
               <textarea rows={4} value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="描述这个模型解决的问题、使用场景、设计思路…"
+                placeholder={zh ? "描述这个模型解决的问题、使用场景、设计思路…" : "Describe the problem this solves, use cases, design rationale…"}
                 className="w-full px-4 py-2.5 text-sm resize-none" style={inputStyle} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label style={labelStyle}>分类</label>
+                <label style={labelStyle}>{zh ? "分类" : "Category"}</label>
                 <select value={categoryId} onChange={e => setCategoryId(e.target.value ? Number(e.target.value) : "")}
                   className="w-full px-4 py-2.5 text-sm" style={inputStyle}>
-                  <option value="">不选分类</option>
+                  <option value="">{zh ? "不选分类" : "No category"}</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>标签（逗号分隔）</label>
+                <label style={labelStyle}>{zh ? "标签（逗号分隔）" : "Tags (comma-separated)"}</label>
                 <input value={tags} onChange={e => setTags(e.target.value)}
-                  placeholder="家居, 工具, 收纳"
+                  placeholder={zh ? "家居, 工具, 收纳" : "home, tools, storage"}
                   className="w-full px-4 py-2.5 text-sm" style={inputStyle} />
               </div>
             </div>
@@ -285,7 +304,7 @@ export default function UploadPage() {
             <button onClick={() => setStep(2)} disabled={!title.trim()}
               className="w-full py-3 rounded-xl text-sm font-semibold mt-2 transition-all"
               style={{ background: title.trim() ? T : "rgba(0,245,212,0.2)", color: title.trim() ? "#050508" : "#3a3a3a" }}>
-              下一步 →
+              {zh ? "下一步 →" : "Next →"}
             </button>
           </div>
         )}
@@ -293,9 +312,8 @@ export default function UploadPage() {
         {/* ── Step 2: 3D File + Tech Params ── */}
         {step === 2 && (
           <div className="space-y-5">
-            {/* File drop zone */}
             <div>
-              <label style={labelStyle}>3D文件 *</label>
+              <label style={labelStyle}>{zh ? "3D文件 *" : "3D File *"}</label>
               <div className="rounded-2xl p-8 text-center cursor-pointer transition-all"
                 style={{
                   border: `2px dashed ${file3D ? T : "rgba(255,255,255,0.1)"}`,
@@ -315,79 +333,76 @@ export default function UploadPage() {
                 ) : (
                   <>
                     <div className="text-3xl mb-2" style={{ color: "#333" }}>⬡</div>
-                    <p className="text-sm font-medium" style={{ color: "#666" }}>拖拽或点击上传3D文件</p>
+                    <p className="text-sm font-medium" style={{ color: "#666" }}>{zh ? "拖拽或点击上传3D文件" : "Drag & drop or click to upload 3D file"}</p>
                     <p className="text-xs mt-1" style={{ color: "#444" }}>STL · OBJ · GLB · 3MF · STEP</p>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Tech params */}
             <div style={sectionCard}>
-              <p className="text-xs font-semibold mb-4" style={{ color: "#666" }}>打印参数（选填）</p>
+              <p className="text-xs font-semibold mb-4" style={{ color: "#666" }}>{zh ? "打印参数（选填）" : "Print Parameters (optional)"}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label style={labelStyle}>材料类型</label>
+                  <label style={labelStyle}>{zh ? "材料类型" : "Material"}</label>
                   <select value={tech.material} onChange={e => setTechField("material", e.target.value)}
                     className="w-full px-3 py-2 text-sm" style={inputStyle}>
                     {MATERIALS.map(m => <option key={m}>{m}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>推荐喷头 (mm)</label>
+                  <label style={labelStyle}>{zh ? "推荐喷头 (mm)" : "Nozzle Size (mm)"}</label>
                   <select value={tech.nozzle_mm} onChange={e => setTechField("nozzle_mm", e.target.value)}
                     className="w-full px-3 py-2 text-sm" style={inputStyle}>
                     {NOZZLE_SIZES.map(s => <option key={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>预估重量 (g)</label>
+                  <label style={labelStyle}>{zh ? "预估重量 (g)" : "Est. Weight (g)"}</label>
                   <input type="number" value={tech.weight_g} onChange={e => setTechField("weight_g", e.target.value)}
                     placeholder="50" className="w-full px-3 py-2 text-sm" style={inputStyle} />
                 </div>
                 <div>
-                  <label style={labelStyle}>打印时间 (min)</label>
+                  <label style={labelStyle}>{zh ? "打印时间 (min)" : "Print Time (min)"}</label>
                   <input type="number" value={tech.print_time_min} onChange={e => setTechField("print_time_min", e.target.value)}
                     placeholder="120" className="w-full px-3 py-2 text-sm" style={inputStyle} />
                 </div>
                 <div>
-                  <label style={labelStyle}>层高 (mm)</label>
+                  <label style={labelStyle}>{zh ? "层高 (mm)" : "Layer Height (mm)"}</label>
                   <input type="number" step="0.05" value={tech.layer_height} onChange={e => setTechField("layer_height", e.target.value)}
                     placeholder="0.2" className="w-full px-3 py-2 text-sm" style={inputStyle} />
                 </div>
                 <div>
-                  <label style={labelStyle}>填充率 (%)</label>
+                  <label style={labelStyle}>{zh ? "填充率 (%)" : "Infill (%)"}</label>
                   <input type="number" min="0" max="100" value={tech.infill_pct} onChange={e => setTechField("infill_pct", e.target.value)}
                     placeholder="20" className="w-full px-3 py-2 text-sm" style={inputStyle} />
                 </div>
               </div>
 
-              {/* Dimensions */}
               <div className="mt-3">
-                <label style={labelStyle}>模型尺寸 L × W × H (mm)</label>
+                <label style={labelStyle}>{zh ? "模型尺寸 L × W × H (mm)" : "Dimensions L × W × H (mm)"}</label>
                 <div className="flex gap-2">
                   {(["dim_x", "dim_y", "dim_z"] as const).map((k, i) => (
                     <input key={k} type="number" value={tech[k]} onChange={e => setTechField(k, e.target.value)}
-                      placeholder={["长", "宽", "高"][i]}
+                      placeholder={zh ? ["长", "宽", "高"][i] : ["L", "W", "H"][i]}
                       className="flex-1 px-3 py-2 text-sm" style={inputStyle} />
                   ))}
                 </div>
               </div>
 
-              {/* Support + assembly */}
               <div className="mt-3 flex items-center gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={tech.support_required}
                     onChange={e => setTechField("support_required", e.target.checked)}
                     className="w-4 h-4 rounded" />
-                  <span className="text-sm" style={{ color: "#888" }}>需要支撑结构</span>
+                  <span className="text-sm" style={{ color: "#888" }}>{zh ? "需要支撑结构" : "Supports required"}</span>
                 </label>
               </div>
 
               <div className="mt-3">
-                <label style={labelStyle}>安装注意事项</label>
+                <label style={labelStyle}>{zh ? "安装注意事项" : "Assembly Notes"}</label>
                 <textarea rows={2} value={tech.assembly_notes} onChange={e => setTechField("assembly_notes", e.target.value)}
-                  placeholder="例如：零件A需先加热再插入零件B…"
+                  placeholder={zh ? "例如：零件A需先加热再插入零件B…" : "e.g. Heat part A before inserting into part B…"}
                   className="w-full px-3 py-2 text-sm resize-none" style={inputStyle} />
               </div>
             </div>
@@ -396,12 +411,12 @@ export default function UploadPage() {
               <button onClick={() => setStep(1)}
                 className="flex-1 py-3 rounded-xl text-sm border transition-all"
                 style={{ borderColor: "rgba(255,255,255,0.1)", color: "#777" }}>
-                上一步
+                {zh ? "上一步" : "Back"}
               </button>
               <button onClick={() => setStep(3)} disabled={!file3D}
                 className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
                 style={{ background: file3D ? T : "rgba(0,245,212,0.2)", color: file3D ? "#050508" : "#3a3a3a" }}>
-                下一步 →
+                {zh ? "下一步 →" : "Next →"}
               </button>
             </div>
           </div>
@@ -411,7 +426,7 @@ export default function UploadPage() {
         {step === 3 && (
           <div className="space-y-5">
             <div>
-              <label style={labelStyle}>关联媒体（图片 / 视频 / 动图，可多文件）</label>
+              <label style={labelStyle}>{zh ? "关联媒体（图片 / 视频 / 动图，可多文件）" : "Media (images / videos / GIFs, multiple files)"}</label>
               <div className="rounded-2xl p-6 text-center cursor-pointer transition-all"
                 style={{ border: "2px dashed rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.02)" }}
                 onDragOver={e => e.preventDefault()}
@@ -425,12 +440,11 @@ export default function UploadPage() {
                   className="hidden"
                   onChange={e => Array.from(e.target.files ?? []).forEach(addMediaFile)} />
                 <div className="text-2xl mb-2" style={{ color: "#333" }}>🖼</div>
-                <p className="text-sm" style={{ color: "#666" }}>拖拽或点击添加图片 / 视频</p>
+                <p className="text-sm" style={{ color: "#666" }}>{zh ? "拖拽或点击添加图片 / 视频" : "Drag & drop or click to add images / videos"}</p>
                 <p className="text-xs mt-1" style={{ color: "#444" }}>JPG · PNG · GIF · MP4 · MOV</p>
               </div>
             </div>
 
-            {/* Media preview list */}
             {mediaFiles.length > 0 && (
               <div className="space-y-2">
                 {mediaFiles.map((mf, i) => (
@@ -462,10 +476,13 @@ export default function UploadPage() {
               </div>
             )}
 
-            {/* Info box */}
             <div className="p-4 rounded-xl text-xs" style={{ background: "rgba(0,245,212,0.04)", border: "1px solid rgba(0,245,212,0.1)" }}>
-              <p className="font-medium mb-1" style={{ color: T }}>✦ 关于版权证书</p>
-              <p style={{ color: "#666" }}>上传成功后系统自动生成 CR-YYYY-NNNNNN 格式证书，包含文件 SHA-256 指纹，不可篡改。</p>
+              <p className="font-medium mb-1" style={{ color: T }}>{zh ? "✦ 关于版权证书" : "✦ About Copyright Certificate"}</p>
+              <p style={{ color: "#666" }}>
+                {zh
+                  ? "上传成功后系统自动生成 CR-YYYY-NNNNNN 格式证书，包含文件 SHA-256 指纹，不可篡改。"
+                  : "A CR-YYYY-NNNNNN certificate is auto-generated on upload, containing the file's SHA-256 fingerprint — tamper-proof."}
+              </p>
             </div>
 
             {error && (
@@ -474,11 +491,14 @@ export default function UploadPage() {
               </div>
             )}
 
-            {/* Upload progress */}
             {uploading && uploadTotal > 0 && (
               <div>
                 <div className="flex justify-between text-xs mb-1" style={{ color: "#555" }}>
-                  <span>{uploadStep < uploadTotal ? `上传中 (${uploadStep}/${uploadTotal})…` : "处理中…"}</span>
+                  <span>
+                    {uploadStep < uploadTotal
+                      ? (zh ? `上传中 (${uploadStep}/${uploadTotal})…` : `Uploading (${uploadStep}/${uploadTotal})…`)
+                      : (zh ? "处理中…" : "Processing…")}
+                  </span>
                   <span>{Math.round((uploadStep / uploadTotal) * 100)}%</span>
                 </div>
                 <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
@@ -492,12 +512,16 @@ export default function UploadPage() {
               <button onClick={() => setStep(2)} disabled={uploading}
                 className="flex-1 py-3 rounded-xl text-sm border transition-all"
                 style={{ borderColor: "rgba(255,255,255,0.1)", color: "#777" }}>
-                上一步
+                {zh ? "上一步" : "Back"}
               </button>
               <button onClick={handlePublish} disabled={uploading}
                 className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
                 style={{ background: uploading ? "rgba(0,245,212,0.3)" : T, color: "#050508" }}>
-                {uploading ? "上传中…" : isLoggedIn ? "发布模型" : "登录后发布"}
+                {uploading
+                  ? (zh ? "上传中…" : "Uploading…")
+                  : isLoggedIn
+                    ? (zh ? "发布模型" : "Publish Model")
+                    : (zh ? "登录后发布" : "Log in to Publish")}
               </button>
             </div>
           </div>

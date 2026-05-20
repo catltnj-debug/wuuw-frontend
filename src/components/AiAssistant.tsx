@@ -8,6 +8,7 @@ import {
   apiAssistantReset,
   type ApiChatMessage,
 } from "@/lib/api";
+import { useLang } from "@/lib/language";
 
 const SESSION_KEY = "wuuw_assistant_session";
 const TEAL = "#00F5D4";
@@ -83,6 +84,7 @@ function TypingDots() {
 
 // ─── Main widget ──────────────────────────────────────────────────────────────
 export default function AiAssistant() {
+  const { lang } = useLang();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ApiChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -145,12 +147,14 @@ export default function AiAssistant() {
       } catch (err) {
         console.error("[AiAssistant] chat error:", err);
         const detail =
-          err instanceof Error ? err.message : "未知错误";
+          err instanceof Error ? err.message : lang === "zh" ? "未知错误" : "Unknown error";
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: `抱歉，我暂时无法回答。\n${detail}`,
+            content: lang === "zh"
+              ? `抱歉，我暂时无法回答。\n${detail}`
+              : `Sorry, I'm unable to respond right now.\n${detail}`,
           },
         ]);
       } finally {
@@ -184,7 +188,7 @@ export default function AiAssistant() {
         style={{ background: TEAL, color: "#000" }}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.94 }}
-        title="打开 AI 助手「悟」"
+        title={lang === "zh" ? "打开 AI 助手「悟」" : "Open AI assistant"}
       >
         {open ? "×" : "悟"}
       </motion.button>
@@ -220,7 +224,7 @@ export default function AiAssistant() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold" style={{ color: "#eee" }}>
-                    WuuW 助手
+                    {lang === "zh" ? "WuuW 助手" : "WuuW Assistant"}
                   </p>
                   <p className="text-xs" style={{ color: "#555" }}>
                     Platform guide · Powered by Claude
@@ -233,9 +237,9 @@ export default function AiAssistant() {
                 style={{ color: "#555" }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = "#aaa")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "#555")}
-                title="清空对话"
+                title={lang === "zh" ? "清空对话" : "Clear conversation"}
               >
-                清空
+                {lang === "zh" ? "清空" : "Clear"}
               </button>
             </div>
 
@@ -250,9 +254,9 @@ export default function AiAssistant() {
                     <span style={{ color: TEAL }}>悟</span>
                   </div>
                   <p className="text-sm text-center" style={{ color: "#777" }}>
-                    你好！我是 WuuW 平台助手。
+                    {lang === "zh" ? "你好！我是 WuuW 平台助手。" : "Hi! I'm the WuuW platform assistant."}
                     <br />
-                    有什么可以帮助你的？
+                    {lang === "zh" ? "有什么可以帮助你的？" : "How can I help you?"}
                   </p>
                   <div className="flex flex-col gap-2 w-full mt-2">
                     {SUGGESTIONS.map((s) => (
@@ -303,7 +307,7 @@ export default function AiAssistant() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="输入消息… (Enter 发送)"
+                  placeholder={lang === "zh" ? "输入消息… (Enter 发送)" : "Type a message… (Enter to send)"}
                   rows={1}
                   className="flex-1 bg-transparent resize-none text-sm outline-none leading-relaxed"
                   style={{
