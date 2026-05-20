@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   apiGetMyCredits, apiGetPaymentHistory, apiCreateCheckout,
@@ -24,7 +24,8 @@ const PACKAGES = [
   { key: "studio",  name: "Studio",  usd: 59.99, credits: 4000, desc: "专业创作者",    descEn: "For power creators" },
 ];
 
-export default function WalletPage() {
+// ── Inner component (uses useSearchParams — must be inside Suspense) ───────────
+function WalletContent() {
   const { isLoggedIn } = useAuth();
   const { lang } = useLang();
   const L = COPY[lang].pages.wallet;
@@ -41,7 +42,7 @@ export default function WalletPage() {
   const [payPage, setPayPage] = useState(1);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [payMsg, setPayMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<"credits" | "purchase" | "payHistory">("credits");
+  const [activeTab, setActiveTab] = useState<"credits" | "purchase" | "payHistory">("purchase");
 
   const PAGE_SIZE = 20;
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -54,8 +55,9 @@ export default function WalletPage() {
       setActiveTab("credits");
     } else if (status === "cancelled") {
       setPayMsg({ type: "error", text: zh ? "支付已取消" : "Payment cancelled." });
+      setActiveTab("purchase");
     }
-  }, [searchParams]);
+  }, [searchParams, zh]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -79,8 +81,8 @@ export default function WalletPage() {
       const origin = window.location.origin;
       const res = await apiCreateCheckout({
         package: pkgKey,
-        success_url: `${origin}/wallet`,
-        cancel_url: `${origin}/wallet`,
+        success_url: `${origin}/wallet?status=success`,
+        cancel_url:  `${origin}/wallet?status=cancelled`,
       });
       window.location.href = res.url;
     } catch (e) {
@@ -97,7 +99,7 @@ export default function WalletPage() {
   );
 
   const earned = entries.filter(e => e.amount > 0).reduce((s, e) => s + e.amount, 0);
-  const spent = entries.filter(e => e.amount < 0).reduce((s, e) => s + e.amount, 0);
+  const spent  = entries.filter(e => e.amount < 0).reduce((s, e) => s + e.amount, 0);
 
   return (
     <div style={{ background: BG, minHeight: "calc(100vh - 64px)" }}>
@@ -141,8 +143,8 @@ export default function WalletPage() {
         {/* ── Tabs ── */}
         <div className="flex gap-1 p-1 rounded-xl mb-6" style={{ background: "rgba(255,255,255,0.03)" }}>
           {([
-            { key: "credits",    label: zh ? "积分记录" : "Credits History" },
             { key: "purchase",   label: zh ? "购买 Credits" : "Buy Credits" },
+            { key: "credits",    label: zh ? "积分记录" : "Credits History" },
             { key: "payHistory", label: zh ? "支付记录" : "Payment History" },
           ] as const).map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
@@ -156,67 +158,6 @@ export default function WalletPage() {
             </button>
           ))}
         </div>
-
-        {/* ── 积分记录 ── */}
-        {activeTab === "credits" && (
-          <>
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              {[
-                { label: zh ? "悬赏完成" : "Bounties Done", value: entries.filter(e => e.action_type === "earn_bounty").length, note: zh ? "次" : "times" },
-                { label: zh ? "任务奖励" : "Task Rewards", value: entries.filter(e => e.action_type === "earn_task").length, note: zh ? "次" : "times" },
-                { label: zh ? "充值次数" : "Purchases", value: entries.filter(e => e.action_type === "purchase").length, note: zh ? "次" : "times" },
-              ].map(s => (
-                <div key={s.label} className="p-4 rounded-xl text-center"
-                  style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="text-xl font-bold mb-0.5" style={{ color: "#eee" }}>{s.value}</div>
-                  <div className="text-xs" style={{ color: "#555" }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            <h2 className="text-base font-semibold mb-4" style={{ color: "#ccc" }}>{L.historyTitle}</h2>
-            {loading ? (
-              <div className="text-center py-8" style={{ color: "#333" }}>{COPY[lang].common.loading}</div>
-            ) : entries.length === 0 ? (
-              <div className="text-center py-12 rounded-xl"
-                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", color: "#444" }}>
-                <p className="text-sm">{L.noHistory}</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {entries.map(e => (
-                  <div key={e.id} className="flex items-center gap-3 p-4 rounded-xl"
-                    style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0"
-                      style={{ background: e.amount > 0 ? "rgba(0,245,212,0.1)" : "rgba(255,100,100,0.08)", color: e.amount > 0 ? T : "#f66" }}>
-                      {ACTION_ICON[e.action_type] ?? (e.amount > 0 ? "+" : "−")}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm" style={{ color: "#ccc" }}>{e.action_label}</p>
-                      {e.note && <p className="text-xs truncate" style={{ color: "#555" }}>{e.note}</p>}
-                      <p className="text-xs" style={{ color: "#444" }}>
-                        {new Date(e.created_at).toLocaleDateString(zh ? "zh-CN" : "en-US")} · {zh ? "余额" : "Balance"} {e.balance_after.toFixed(1)}
-                      </p>
-                    </div>
-                    <div className="text-sm font-semibold flex-shrink-0" style={{ color: e.amount > 0 ? T : "#f66" }}>
-                      {e.amount > 0 ? "+" : ""}{e.amount.toFixed(1)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {totalPages > 1 && (
-              <div className="flex justify-center gap-2 mt-4">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                  <button key={p} onClick={() => setPage(p)} className="w-8 h-8 rounded text-xs"
-                    style={{ background: p === page ? "rgba(0,245,212,0.12)" : "rgba(255,255,255,0.04)", color: p === page ? T : "#666", border: p === page ? `1px solid rgba(0,245,212,0.3)` : "1px solid rgba(255,255,255,0.06)" }}>
-                    {p}
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
 
         {/* ── 购买 Credits ── */}
         {activeTab === "purchase" && (
@@ -263,6 +204,72 @@ export default function WalletPage() {
               {zh ? "由 Stripe 安全处理 · 支持 Visa / Mastercard / 支付宝" : "Powered by Stripe · Visa / Mastercard / Apple Pay accepted"}
             </p>
           </div>
+        )}
+
+        {/* ── 积分记录 ── */}
+        {activeTab === "credits" && (
+          <>
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              {[
+                { label: zh ? "悬赏完成" : "Bounties Done", value: entries.filter(e => e.action_type === "earn_bounty").length },
+                { label: zh ? "任务奖励" : "Task Rewards",  value: entries.filter(e => e.action_type === "earn_task").length   },
+                { label: zh ? "充值次数" : "Purchases",      value: entries.filter(e => e.action_type === "purchase").length    },
+              ].map(s => (
+                <div key={s.label} className="p-4 rounded-xl text-center"
+                  style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="text-xl font-bold mb-0.5" style={{ color: "#eee" }}>{s.value}</div>
+                  <div className="text-xs" style={{ color: "#555" }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <h2 className="text-base font-semibold mb-4" style={{ color: "#ccc" }}>{L.historyTitle}</h2>
+            {loading ? (
+              <div className="text-center py-8" style={{ color: "#333" }}>{COPY[lang].common.loading}</div>
+            ) : entries.length === 0 ? (
+              <div className="text-center py-12 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", color: "#444" }}>
+                <p className="text-sm">{L.noHistory}</p>
+                <button onClick={() => setActiveTab("purchase")}
+                  className="mt-4 px-4 py-2 rounded-xl text-xs font-medium transition-all"
+                  style={{ background: "rgba(0,245,212,0.08)", color: T, border: "1px solid rgba(0,245,212,0.2)" }}>
+                  {zh ? "去充值 →" : "Buy Credits →"}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {entries.map(e => (
+                  <div key={e.id} className="flex items-center gap-3 p-4 rounded-xl"
+                    style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                      style={{ background: e.amount > 0 ? "rgba(0,245,212,0.1)" : "rgba(255,100,100,0.08)", color: e.amount > 0 ? T : "#f66" }}>
+                      {ACTION_ICON[e.action_type] ?? (e.amount > 0 ? "+" : "−")}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm" style={{ color: "#ccc" }}>{e.action_label}</p>
+                      {e.note && <p className="text-xs truncate" style={{ color: "#555" }}>{e.note}</p>}
+                      <p className="text-xs" style={{ color: "#444" }}>
+                        {new Date(e.created_at).toLocaleDateString(zh ? "zh-CN" : "en-US")} · {zh ? "余额" : "Balance"} {e.balance_after.toFixed(1)}
+                      </p>
+                    </div>
+                    <div className="text-sm font-semibold flex-shrink-0" style={{ color: e.amount > 0 ? T : "#f66" }}>
+                      {e.amount > 0 ? "+" : ""}{e.amount.toFixed(1)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {totalPages > 1 && (
+              <div className="flex justify-center gap-2 mt-4">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                  <button key={p} onClick={() => setPage(p)} className="w-8 h-8 rounded text-xs"
+                    style={{ background: p === page ? "rgba(0,245,212,0.12)" : "rgba(255,255,255,0.04)", color: p === page ? T : "#666", border: p === page ? `1px solid rgba(0,245,212,0.3)` : "1px solid rgba(255,255,255,0.06)" }}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* ── 支付记录 ── */}
@@ -315,5 +322,18 @@ export default function WalletPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ── Page export wraps WalletContent in Suspense (required for useSearchParams) ─
+export default function WalletPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[calc(100vh-64px)]" style={{ background: BG }}>
+        <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#00F5D4", borderTopColor: "transparent" }} />
+      </div>
+    }>
+      <WalletContent />
+    </Suspense>
   );
 }

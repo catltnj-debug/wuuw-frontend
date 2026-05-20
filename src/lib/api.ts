@@ -562,11 +562,13 @@ export interface ApiDiscTask {
 export interface ApiLevelInfo {
   level: number;
   name: string;
+  en_name: string;
   current_exp: number;
   level_min: number;
   level_max?: number | null;
   next_level_min?: number | null;
   next_level_name?: string | null;
+  next_level_en_name?: string | null;
   progress_pct: number;
 }
 
@@ -581,6 +583,7 @@ export interface ApiUserProfile {
   projects: { id: number; asset_no: string; title: string; current_version: string }[];
   recent_activity: { action: string; exp: number; created_at: string }[];
   joined_at: string;
+  stats?: { models: number; likes: number; prints: number; score: number };
 }
 
 export interface ApiExpLog {

@@ -234,7 +234,7 @@ export default function Navbar() {
           <div className="transition-transform duration-700 group-hover:rotate-180">
             <TaichiLogo size={26} />
           </div>
-          <span className="font-bold text-base tracking-widest uppercase"
+          <span className="font-bold text-base tracking-widest"
             style={{ color: T, textShadow: `0 0 18px rgba(0,245,212,0.35)` }}>
             WuuW
           </span>

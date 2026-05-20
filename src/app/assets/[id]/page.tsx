@@ -42,6 +42,19 @@ const LANG_NAME: Record<string, string> = {
   ko: "한국어", fr: "Français", de: "Deutsch", ar: "العربية", ru: "Русский",
 };
 
+const ZONE_NAME_EN: Record<string, string> = {
+  "需求区": "Requirements",
+  "数据区": "Data",
+  "评测区": "Reviews",
+  "讨论区": "Discussion",
+  "反馈区": "Feedback",
+  "更新区": "Updates",
+};
+function localizeZoneName(name: string, isZh: boolean): string {
+  if (isZh) return name;
+  return ZONE_NAME_EN[name] ?? name;
+}
+
 function fmtDuration(sec: number) {
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
@@ -111,6 +124,42 @@ function VoiceRecorder({ onReady }: { onReady: (blob: Blob, dur: number) => void
 const TASK_STATUS_COLOR: Record<string, string> = {
   open: T, claimed: "#F5A623", in_progress: "#BF5FFF", done: "#555",
 };
+
+function SaveButton({ assetId, lang }: { assetId: number; lang: string }) {
+  const [saved, setSaved] = useState(false);
+  return (
+    <button onClick={() => setSaved(s => !s)}
+      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm transition-all"
+      style={{
+        background: saved ? "rgba(245,166,35,0.12)" : "rgba(255,255,255,0.04)",
+        color: saved ? "#F5A623" : "#777",
+        border: saved ? "1px solid rgba(245,166,35,0.25)" : "1px solid rgba(255,255,255,0.08)",
+      }}>
+      {saved ? "♥" : "♡"} {lang === "zh" ? "收藏" : "Save"}
+    </button>
+  );
+}
+
+function ShareButton({ title, lang }: { title: string; lang: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleShare() {
+    if (navigator.share) {
+      navigator.share({ title, url: window.location.href }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(() => {});
+    }
+  }
+  return (
+    <button onClick={handleShare}
+      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm transition-all"
+      style={{ background: "rgba(255,255,255,0.04)", color: copied ? T : "#777", border: `1px solid ${copied ? "rgba(0,245,212,0.25)" : "rgba(255,255,255,0.08)"}` }}>
+      {copied ? "✓" : "↗"} {copied ? (lang === "zh" ? "已复制" : "Copied!") : (lang === "zh" ? "分享" : "Share")}
+    </button>
+  );
+}
 
 export default function AssetDetailPage() {
   const params = useParams();
@@ -211,8 +260,8 @@ export default function AssetDetailPage() {
       <div className="max-w-4xl mx-auto px-6 py-8">
 
         {/* ── 产品基本信息 ── */}
-        <div className="mb-8 p-5 rounded-2xl" style={cardStyle}>
-          <div className="flex items-start justify-between gap-4">
+        <div className="mb-6 p-5 rounded-2xl" style={cardStyle}>
+          <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-xs px-2 py-0.5 rounded font-mono"
@@ -226,23 +275,54 @@ export default function AssetDetailPage() {
                 <p className="text-sm leading-relaxed" style={{ color: "#888" }}>{asset.description}</p>
               )}
             </div>
-            <div className="flex flex-col items-end gap-3 flex-shrink-0">
-              {isLoggedIn && (
-                <button onClick={() => setShowBountyModal(true)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap"
-                  style={{ background: "rgba(245,166,35,0.12)", color: "#F5A623", border: "1px solid rgba(245,166,35,0.25)" }}>
-                  {A.postBounty}
-                </button>
-              )}
-              {asset.latest_certificate && (
-                <div className="text-right">
-                  <p className="text-xs mb-1" style={{ color: "#555" }}>{A.copyright}</p>
-                  <p className="text-xs font-mono" style={{ color: "#00F5D4" }}>{asset.latest_certificate}</p>
-                </div>
-              )}
-            </div>
+            {isLoggedIn && (
+              <button onClick={() => setShowBountyModal(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap flex-shrink-0"
+                style={{ background: "rgba(245,166,35,0.12)", color: "#F5A623", border: "1px solid rgba(245,166,35,0.25)" }}>
+                {A.postBounty}
+              </button>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 pt-4 border-t flex-wrap"
+            style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+            <a href={`/printers?model=${assetId}`}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+              style={{ background: "rgba(0,245,212,0.12)", color: T, border: "1px solid rgba(0,245,212,0.25)" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(0,245,212,0.2)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(0,245,212,0.12)"; }}>
+              🖨️ {lang === "zh" ? "发起打印" : "Print This"}
+            </a>
+            <SaveButton assetId={assetId} lang={lang} />
+            <ShareButton title={asset.title} lang={lang} />
           </div>
         </div>
+
+        {/* ── 版权证书 ── */}
+        {asset.latest_certificate && (
+          <div className="mb-8 p-4 rounded-2xl flex items-center gap-4"
+            style={{ background: "rgba(191,95,255,0.05)", border: "1px solid rgba(191,95,255,0.18)" }}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0"
+              style={{ background: "rgba(191,95,255,0.12)", color: "#BF5FFF" }}>
+              📜
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold mb-0.5" style={{ color: "#BF5FFF" }}>{A.copyright}</p>
+              <p className="text-sm font-mono truncate" style={{ color: "#ddd" }}>{asset.latest_certificate}</p>
+              <p className="text-xs mt-0.5" style={{ color: "#555" }}>
+                {lang === "zh" ? "链上确权，版权受保护" : "On-chain verified · Copyright protected"}
+              </p>
+            </div>
+            <a href={`/verify/${asset.latest_certificate}`}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium flex-shrink-0 transition-all"
+              style={{ background: "rgba(191,95,255,0.12)", color: "#BF5FFF", border: "1px solid rgba(191,95,255,0.25)" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(191,95,255,0.2)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(191,95,255,0.12)"; }}>
+              {lang === "zh" ? "验证" : "Verify"}
+            </a>
+          </div>
+        )}
 
         {/* ── 3D 预览 / 媒体 ── */}
         {asset.file_format === "GLB" || asset.file_format === "GLTF" ? (
@@ -274,33 +354,35 @@ export default function AssetDetailPage() {
         ) : null}
 
         {/* ── 打印参数 ── */}
-        {asset.tech_params && Object.values(asset.tech_params).some(v => v != null) && (
+        {asset.tech_params && (
           <div className="mb-8 p-5 rounded-2xl" style={cardStyle}>
             <p className="text-xs font-semibold mb-4" style={{ color: "#666" }}>{A.printParams}</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
-                { label: A.params.material, value: asset.tech_params.material },
-                { label: A.params.nozzle, value: asset.tech_params.nozzle_size ? `${asset.tech_params.nozzle_size} mm` : null },
-                { label: A.params.layer, value: asset.tech_params.layer_height ? `${asset.tech_params.layer_height} mm` : null },
-                { label: A.params.infill, value: asset.tech_params.infill_pct != null ? `${asset.tech_params.infill_pct}%` : null },
-                { label: A.params.weight, value: asset.tech_params.weight_g ? `${asset.tech_params.weight_g} g` : null },
-                { label: A.params.size, value: asset.tech_params.dim_x ? `${asset.tech_params.dim_x}×${asset.tech_params.dim_y}×${asset.tech_params.dim_z} mm` : null },
+                { label: A.params.material, value: asset.tech_params.material ?? null },
+                { label: A.params.weight,   value: asset.tech_params.weight_g != null ? `${asset.tech_params.weight_g} g` : null },
+                { label: A.params.printTime, value: asset.tech_params.print_time_min ? `${Math.floor(asset.tech_params.print_time_min / 60)}h ${asset.tech_params.print_time_min % 60}m` : null },
+                { label: A.params.nozzle,  value: asset.tech_params.nozzle_size != null ? `${asset.tech_params.nozzle_size} mm` : null },
+                { label: A.params.size,    value: asset.tech_params.dim_x != null ? `${asset.tech_params.dim_x}×${asset.tech_params.dim_y}×${asset.tech_params.dim_z} mm` : null },
+                { label: A.params.layer,   value: asset.tech_params.layer_height != null ? `${asset.tech_params.layer_height} mm` : null },
+                { label: A.params.infill,  value: asset.tech_params.infill_pct != null ? `${asset.tech_params.infill_pct}%` : null },
                 { label: A.params.support, value: asset.tech_params.support_required != null ? (asset.tech_params.support_required ? A.params.yes : A.params.no) : null },
-                { label: A.params.printTime, value: asset.tech_params.print_time_min ? `${Math.floor(asset.tech_params.print_time_min / 60)}h${asset.tech_params.print_time_min % 60}m` : null },
-              ].filter(p => p.value != null).map(p => (
+              ].map(p => (
                 <div key={p.label} className="p-3 rounded-xl"
                   style={{ background: "rgba(255,255,255,0.03)" }}>
                   <p className="text-xs mb-0.5" style={{ color: "#555" }}>{p.label}</p>
-                  <p className="text-sm font-medium" style={{ color: "#ccc" }}>{p.value}</p>
+                  <p className="text-sm font-medium" style={{ color: p.value != null ? "#ccc" : "#333" }}>
+                    {p.value ?? "—"}
+                  </p>
                 </div>
               ))}
             </div>
-            {asset.tech_params.assembly_notes && (
-              <div className="mt-3 p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
-                <p className="text-xs mb-0.5" style={{ color: "#555" }}>{A.params.assembly}</p>
-                <p className="text-sm" style={{ color: "#ccc" }}>{asset.tech_params.assembly_notes}</p>
-              </div>
-            )}
+            <div className="mt-3 p-3 rounded-xl" style={{ background: "rgba(255,255,255,0.03)" }}>
+              <p className="text-xs mb-0.5" style={{ color: "#555" }}>{A.params.assembly}</p>
+              <p className="text-sm" style={{ color: asset.tech_params.assembly_notes ? "#ccc" : "#333" }}>
+                {asset.tech_params.assembly_notes ?? "—"}
+              </p>
+            </div>
           </div>
         )}
 
@@ -316,7 +398,7 @@ export default function AssetDetailPage() {
                     color: activeZone?.id === z.id ? T : "#555",
                     border: activeZone?.id === z.id ? "1px solid rgba(0,245,212,0.2)" : "1px solid transparent",
                   }}>
-                  {z.zone_name}
+                  {localizeZoneName(z.zone_name, lang === "zh")}
                   <span className="ml-1.5 text-xs opacity-60">({z.discussion_count})</span>
                 </button>
               ))}
@@ -472,7 +554,7 @@ function ZonePanel({
             </div>
           )}
           <textarea rows={3} value={postText} onChange={e => setPostText(e.target.value)}
-            placeholder={lang === "zh" ? `在${zone.zone_name}发表你的看法…` : `Share your thoughts in ${zone.zone_name}…`}
+            placeholder={lang === "zh" ? `在${zone.zone_name}发表你的看法…` : `Share your thoughts in ${localizeZoneName(zone.zone_name, false)}…`}
             className="w-full text-sm rounded-xl p-3 resize-none mb-2"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
           {voiceBlob && (

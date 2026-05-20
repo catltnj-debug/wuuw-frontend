@@ -2,26 +2,33 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useLang, COPY } from "@/lib/language";
+import { apiGetAssets, type ApiAsset } from "@/lib/api";
 import HeroCanvas from "@/components/HeroCanvas";
 
 const T = "#00F5D4";
 
-const LIVE_FEED = [
-  { user: "Aria.eth", model: "Modular Cable Organizer", action: { zh: "刚刚打印",    en: "just printed"    }, time: "2s"  },
-  { user: "Kai_3D",   model: "Ergonomic Pen Holder",    action: { zh: "已显化",      en: "manifested"      }, time: "18s" },
-  { user: "Nova_M",   model: "Foldable Phone Stand",    action: { zh: "获得12 WuuW", en: "earned 12 WuuW"  }, time: "1m"  },
-  { user: "Zen.io",   model: "Herb Garden Tray",         action: { zh: "刚刚打印",    en: "just printed"    }, time: "2m"  },
-  { user: "Pulse",    model: "Cable Clip Set",           action: { zh: "获得8 WuuW",  en: "earned 8 WuuW"   }, time: "4m"  },
-];
+function timeAgo(iso: string): string {
+  const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h`;
+  return `${Math.floor(sec / 86400)}d`;
+}
 
 export default function HomePage() {
   const { lang } = useLang();
   const c = COPY[lang].home;
+  const [feed, setFeed] = useState<ApiAsset[]>([]);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 4500);
+    apiGetAssets({ pageSize: 6 }).then(r => setFeed(r.items)).catch(() => {});
+    const id = setInterval(() => {
+      apiGetAssets({ pageSize: 6 }).then(r => setFeed(r.items)).catch(() => {});
+      setTick(t => t + 1);
+    }, 30_000);
     return () => clearInterval(id);
   }, []);
 
@@ -50,8 +57,8 @@ export default function HomePage() {
         <div className="rounded-2xl border overflow-hidden"
           style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.018)" }}>
           <div className="px-5">
-            {LIVE_FEED.map((item, i) => (
-              <motion.div key={`${item.user}-${tick}`}
+            {feed.length > 0 ? feed.map((item, i) => (
+              <motion.div key={`${item.id}-${tick}`}
                 initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.07 }}
                 className="flex items-center justify-between py-3 border-b"
@@ -59,17 +66,24 @@ export default function HomePage() {
                 <div className="flex items-center gap-3">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                     style={{ background: "rgba(0,245,212,0.08)", color: T, border: "1px solid rgba(0,245,212,0.18)" }}>
-                    {item.user[0]}
+                    {item.creator[0]?.toUpperCase() ?? "?"}
                   </div>
                   <div className="text-sm">
-                    <span style={{ color: T }}>{item.user}</span>
-                    <span style={{ color: "#555" }}> · {item.action[lang]} · </span>
-                    <span style={{ color: "#999" }}>{item.model}</span>
+                    <span style={{ color: T }}>{item.creator}</span>
+                    <span style={{ color: "#555" }}> · {lang === "zh" ? "上传了" : "uploaded"} · </span>
+                    <Link href={`/assets/${item.id}`} style={{ color: "#999" }}
+                      className="hover:underline">{item.title}</Link>
                   </div>
                 </div>
-                <span className="text-xs flex-shrink-0 ml-3" style={{ color: "#3a3a3a" }}>{item.time}</span>
+                <span className="text-xs flex-shrink-0 ml-3" style={{ color: "#3a3a3a" }}>
+                  {timeAgo(item.created_at)}
+                </span>
               </motion.div>
-            ))}
+            )) : (
+              <div className="py-8 text-center text-xs" style={{ color: "#3a3a3a" }}>
+                {lang === "zh" ? "暂无动态" : "No activity yet"}
+              </div>
+            )}
           </div>
         </div>
       </section>

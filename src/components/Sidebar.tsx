@@ -9,7 +9,8 @@ import { useLang, COPY } from "@/lib/language";
 import { useSidebar } from "@/lib/sidebar";
 import {
   apiGetMyCreatedProjects, apiGetMyJoinedProjects, apiGetProjectTasks,
-  type ApiProject,
+  apiGetUserProfile, apiGetMyCredits,
+  type ApiProject, type ApiUserProfile,
 } from "@/lib/api";
 
 const T = "#00F5D4";
@@ -309,10 +310,10 @@ function ProjectsMenuItem({ created, joined, taskCounts, totalTasks, collapsed }
 
 // ── Profile strip ─────────────────────────────────────────────────────────────
 const STATS_DEF = [
-  { zh: "出品量", en: "Models", key: "models" },
-  { zh: "点赞",   en: "Likes",  key: "likes"  },
-  { zh: "显化数", en: "Prints", key: "prints" },
-  { zh: "贡献值", en: "Score",  key: "score"  },
+  { zh: "出品量", en: "Models", key: "models" as const },
+  { zh: "点赞",   en: "Likes",  key: "likes"  as const },
+  { zh: "显化数", en: "Prints", key: "prints" as const },
+  { zh: "贡献值", en: "Score",  key: "score"  as const },
 ];
 
 // ── Main Sidebar ──────────────────────────────────────────────────────────────
@@ -325,6 +326,8 @@ export default function Sidebar() {
   const [created, setCreated] = useState<ApiProject[]>([]);
   const [joined, setJoined] = useState<ApiProject[]>([]);
   const [taskCounts, setTaskCounts] = useState<Record<number, number>>({});
+  const [profile, setProfile] = useState<ApiUserProfile | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
 
   const fetchProjects = useCallback(async () => {
     if (!isLoggedIn) return;
@@ -347,6 +350,12 @@ export default function Sidebar() {
     return () => clearInterval(id);
   }, [fetchProjects]);
 
+  useEffect(() => {
+    if (!isLoggedIn || !user) return;
+    apiGetUserProfile(user.id).then(p => setProfile(p)).catch(() => {});
+    apiGetMyCredits(1).then(r => setCredits(r.balance)).catch(() => {});
+  }, [isLoggedIn, user?.id]);
+
   const totalTasks = Object.values(taskCounts).reduce((a, b) => a + b, 0);
   const w = collapsed ? 48 : 240;
 
@@ -363,14 +372,29 @@ export default function Sidebar() {
             {user?.username?.[0]?.toUpperCase() ?? "?"}
           </div>
           <p className="text-xs font-medium mb-0.5" style={{ color: "#bbb" }}>{user?.username ?? "Guest"}</p>
-          <p className="text-xs mb-3" style={{ color: "rgba(0,245,212,0.55)" }}>{user?.token_balance ?? 0} WuuW</p>
+          <div className="flex items-center gap-1.5 mb-1">
+            {profile?.level && (
+              <span className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                style={{ background: "rgba(0,245,212,0.08)", color: T, fontSize: 10 }}>
+                Lv.{profile.level.level} {lang === "zh" ? profile.level.name : (profile.level.en_name ?? profile.level.name)}
+              </span>
+            )}
+          </div>
+          <p className="text-xs mb-3" style={{ color: "rgba(0,245,212,0.55)" }}>
+            💎 {credits !== null ? credits.toFixed(0) : "—"} Credits
+          </p>
           <div className="grid grid-cols-2 gap-1 w-full">
-            {STATS_DEF.map(st => (
-              <div key={st.key} className="flex flex-col items-center py-1.5 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
-                <span className="text-xs font-semibold" style={{ color: "#c0c0c0" }}>—</span>
-                <span className="text-xs mt-0.5" style={{ color: "#444" }}>{lang === "zh" ? st.zh : st.en}</span>
-              </div>
-            ))}
+            {STATS_DEF.map(st => {
+              const val = profile?.stats?.[st.key];
+              return (
+                <div key={st.key} className="flex flex-col items-center py-1.5 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                  <span className="text-xs font-semibold" style={{ color: val != null ? "#c0c0c0" : "#333" }}>
+                    {val != null ? val : "—"}
+                  </span>
+                  <span className="text-xs mt-0.5" style={{ color: "#444" }}>{lang === "zh" ? st.zh : st.en}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       ) : (
