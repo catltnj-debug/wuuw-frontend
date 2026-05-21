@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { useLang } from "@/lib/language";
 
-const CW = 1400, CH = 700;
+const CW = 1400, CH = 630;
 const CX = CW / 2, CY = CH / 2;
 const TR = 185;
 
@@ -216,44 +216,57 @@ export default function HeroCanvas() {
       ctx.stroke();
 
       // ── Yin-Yang ──────────────────────────────────────────────────────────
-      // Yang half (right)
+      // 1. Full background circle — dark (yin base)
       ctx.beginPath();
-      ctx.arc(0, 0, R, -Math.PI / 2, Math.PI / 2, false);
-      ctx.arc(0, R / 2, R / 2, Math.PI / 2, -Math.PI / 2, false);
-      ctx.arc(0, -R / 2, R / 2, Math.PI / 2, -Math.PI / 2, true);
-      ctx.closePath();
-      ctx.fillStyle = enlightened
-        ? `rgba(255,255,255,${0.14 + ef * 0.22})`
-        : "rgba(210,225,248,0.1)";
-      ctx.shadowBlur = 30;
-      ctx.shadowColor = enlightened ? "rgba(255,255,255,0.7)" : "rgba(200,220,255,0.35)";
-      ctx.fill();
-
-      // Yin half (left)
-      ctx.beginPath();
-      ctx.arc(0, 0, R, Math.PI / 2, -Math.PI / 2, false);
-      ctx.arc(0, -R / 2, R / 2, -Math.PI / 2, Math.PI / 2, true);
-      ctx.arc(0, R / 2, R / 2, -Math.PI / 2, Math.PI / 2, false);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(8,10,18,0.55)";
+      ctx.arc(0, 0, R, 0, Math.PI * 2);
       ctx.shadowBlur = 0;
+      ctx.fillStyle = enlightened ? `rgba(5,5,10,${0.30 - ef * 0.25})` : "#0D0D14";
       ctx.fill();
 
-      // Center dots
-      ctx.shadowBlur = 22;
-      ctx.shadowColor = enlightened ? "rgba(255,255,255,1)" : "rgba(210,230,255,0.9)";
-      ctx.fillStyle = enlightened
-        ? `rgba(255,255,255,${0.7 + ef * 0.3})`
-        : "rgba(210,230,255,0.65)";
+      // 2. Right semicircle — white (yang)
       ctx.beginPath();
-      ctx.arc(0, -R / 2, R * 0.1, 0, Math.PI * 2); // light dot in yang
+      ctx.arc(0, 0, R, -Math.PI / 2, Math.PI / 2);
+      ctx.shadowBlur = enlightened ? 40 : 18;
+      ctx.shadowColor = enlightened ? "rgba(255,255,255,0.9)" : "rgba(190,215,255,0.5)";
+      ctx.fillStyle = enlightened ? `rgba(255,255,255,${0.92 + ef * 0.08})` : "#E0E8F0";
       ctx.fill();
 
-      ctx.fillStyle = `rgba(30,32,45,${0.8 - ef * 0.3})`;
+      // 3. Upper small semicircle — white (yang extends up)
+      ctx.beginPath();
+      ctx.arc(0, -R / 2, R / 2, Math.PI / 2, -Math.PI / 2, false);
+      ctx.fillStyle = enlightened ? `rgba(255,255,255,${0.92 + ef * 0.08})` : "#E0E8F0";
+      ctx.fill();
+
+      // 4. Lower small semicircle — dark (yin extends down)
+      ctx.beginPath();
+      ctx.arc(0, R / 2, R / 2, Math.PI / 2, -Math.PI / 2, true);
       ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.arc(0, R / 2, R * 0.1, 0, Math.PI * 2); // dark dot in yin
+      ctx.fillStyle = enlightened ? `rgba(5,5,10,${0.30 - ef * 0.25})` : "#0D0D14";
       ctx.fill();
+
+      // 5. Upper fish eye — dark dot in yang (white area)
+      ctx.beginPath();
+      ctx.arc(0, -R / 2, R / 6, 0, Math.PI * 2);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = enlightened ? `rgba(5,5,10,${0.85 - ef * 0.7})` : "#0D0D14";
+      ctx.fill();
+
+      // 6. Lower fish eye — white dot in yin (dark area)
+      ctx.beginPath();
+      ctx.arc(0, R / 2, R / 6, 0, Math.PI * 2);
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = enlightened ? "rgba(255,255,255,0.9)" : "rgba(210,230,255,0.6)";
+      ctx.fillStyle = enlightened ? `rgba(255,255,255,${0.92 + ef * 0.08})` : "#E0E8F0";
+      ctx.fill();
+
+      // 7. Outer ring stroke
+      ctx.beginPath();
+      ctx.arc(0, 0, R, 0, Math.PI * 2);
+      ctx.strokeStyle = white(0.5 + ef * 0.2);
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = white(0.6);
+      ctx.stroke();
 
       ctx.restore();
     }

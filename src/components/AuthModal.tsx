@@ -147,10 +147,22 @@ export default function AuthModal() {
               </button>
             </form>
 
+            {tab === "login" && (
+              <div className="mt-3 text-center">
+                <a href="/forgot-password" onClick={closeAuthModal}
+                  className="text-xs transition-colors"
+                  style={{ color: "#444" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = T; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#444"; }}>
+                  Forgot password?
+                </a>
+              </div>
+            )}
+
             <button
               onClick={closeAuthModal}
-              className="mt-4 w-full text-xs text-center"
-              style={{ color: "#444" }}
+              className="mt-3 w-full text-xs text-center"
+              style={{ color: "#333" }}
             >
               {a.cancel}
             </button>

@@ -320,7 +320,7 @@ const STATS_DEF = [
 export default function Sidebar() {
   const { user, isLoggedIn } = useAuth();
   const { lang } = useLang();
-  const { collapsed, setCollapsed } = useSidebar();
+  const { collapsed, setCollapsed, mobileOpen, setMobileOpen } = useSidebar();
   const { before, after } = useMenuItems();
 
   const [created, setCreated] = useState<ApiProject[]>([]);
@@ -360,8 +360,15 @@ export default function Sidebar() {
   const w = collapsed ? 48 : 240;
 
   return (
-    <aside className="fixed left-0 bottom-0 flex flex-col transition-all duration-300"
-      style={{ top: 64, width: w, background: "rgba(3,3,6,0.95)", borderRight: "1px solid rgba(255,255,255,0.055)", backdropFilter: "blur(10px)", zIndex: 40, overflow: "hidden" }}>
+    <>
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-30" style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+          onClick={() => setMobileOpen(false)} />
+      )}
+    <aside
+      className={`fixed left-0 bottom-0 flex flex-col transition-all duration-300 ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+      style={{ top: 64, width: w, background: "rgba(3,3,6,0.98)", borderRight: "1px solid rgba(255,255,255,0.055)", backdropFilter: "blur(10px)", zIndex: 40, overflow: "hidden" }}>
 
       {/* Profile */}
       {!collapsed ? (
@@ -434,5 +441,6 @@ export default function Sidebar() {
         {after.map(item => <MenuNode key={item.id} item={item} depth={0} collapsed={collapsed} />)}
       </nav>
     </aside>
+    </>
   );
 }
