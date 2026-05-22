@@ -1,4 +1,8 @@
-const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001";
+// Strip any trailing "/api" so that NEXT_PUBLIC_API_BASE can be set as either
+// "https://wuuw.io" or "https://wuuw.io/api" without producing doubled paths
+// like /api/api/users/login.  All call sites already append "/api/..." themselves.
+const API = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001")
+  .replace(/\/api\/?$/, "");
 
 function token() {
   return typeof window !== "undefined" ? localStorage.getItem("wuuw_token") : null;
