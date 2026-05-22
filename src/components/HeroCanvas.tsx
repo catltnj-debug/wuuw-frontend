@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { useLang } from "@/lib/language";
 
 const CW = 1400, CH = 630;
 const CX = CW / 2, CY = CH / 2;
@@ -45,7 +43,6 @@ function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
 export default function HeroCanvas() {
   const cvRef  = useRef<HTMLCanvasElement>(null);
-  const { lang } = useLang();
 
   useEffect(() => {
     const cv = cvRef.current;
@@ -645,40 +642,11 @@ export default function HeroCanvas() {
   }, []);
 
   return (
-    <div className="relative w-full" style={{ background: "#050508" }}>
-      <canvas
-        ref={cvRef}
-        width={CW}
-        height={CH}
-        style={{ display: "block", width: "100%", height: "auto" }}
-      />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <Link
-          href="/workspace"
-          className="pointer-events-auto rounded-full text-sm font-semibold transition-all duration-300"
-          style={{
-            padding: "11px 28px",
-            background: "rgba(8,10,20,0.55)",
-            color: "rgba(210,230,255,0.92)",
-            border: "1px solid rgba(190,210,255,0.32)",
-            backdropFilter: "blur(14px)",
-            boxShadow: "0 0 28px rgba(190,210,255,0.18), inset 0 0 16px rgba(190,210,255,0.04)",
-            letterSpacing: "0.06em",
-          }}
-          onMouseEnter={e => {
-            const el = e.currentTarget as HTMLElement;
-            el.style.background  = "rgba(190,210,255,0.15)";
-            el.style.boxShadow   = "0 0 44px rgba(190,210,255,0.38), inset 0 0 20px rgba(190,210,255,0.08)";
-          }}
-          onMouseLeave={e => {
-            const el = e.currentTarget as HTMLElement;
-            el.style.background  = "rgba(8,10,20,0.55)";
-            el.style.boxShadow   = "0 0 28px rgba(190,210,255,0.18), inset 0 0 16px rgba(190,210,255,0.04)";
-          }}
-        >
-          {lang === "zh" ? "进入我的创作区" : "Enter My Studio"}
-        </Link>
-      </div>
-    </div>
+    <canvas
+      ref={cvRef}
+      width={CW}
+      height={CH}
+      style={{ display: "block", width: "100%", height: "auto", background: "#050508" }}
+    />
   );
 }
