@@ -64,6 +64,7 @@ function useMenuItems(): { before: MenuItem[]; after: MenuItem[] } {
         { id: "inProgress", icon: "◑", label: s.inProgress, href: "/workspace?tab=models&stage=collab", badge: 0 },
         { id: "ready",      icon: "◉", label: s.ready,      href: "/workspace?tab=models&stage=ready",  badge: 0 },
         { id: "mold",       icon: "⬡", label: s.mold,       href: "/workspace?tab=models&stage=mold",   badge: 0 },
+        { id: "upload",     icon: "⊕", label: s.upload,     href: "/upload" },
       ],
     },
     { id: "orders", icon: "◎", label: s.orders, href: "/workspace?tab=orders",
