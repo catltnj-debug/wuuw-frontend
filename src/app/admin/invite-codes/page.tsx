@@ -7,7 +7,7 @@ import Link from "next/link";
 const T = "#00F5D4";
 
 export default function InviteCodesPage() {
-  const { user, isLoggedIn } = useAuth();
+  const { user, isLoggedIn, authLoading } = useAuth();
   const [codes, setCodes] = useState<ApiInviteCode[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -43,6 +43,18 @@ export default function InviteCodesPage() {
     navigator.clipboard.writeText(newCodes.join("\n"));
     setCopied("all");
     setTimeout(() => setCopied(null), 2000);
+  }
+
+  // Wait for the initial token-verification request to complete before
+  // deciding whether to show "Admin access required".  Without this guard
+  // the check runs while user===null (auth still loading) and every admin
+  // user sees the error on every hard-refresh.
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-64px)]" style={{ background: "#050508" }}>
+        <p style={{ color: "#555" }}>Loading…</p>
+      </div>
+    );
   }
 
   if (!isLoggedIn || !user?.is_admin) {

@@ -6,6 +6,8 @@ import { apiLogin, apiRegister, apiGetMe, type ApiUser } from "./api";
 interface AuthCtx {
   isLoggedIn: boolean;
   user: ApiUser | null;
+  /** true while the initial token-verification request is in flight */
+  authLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>;
   logout: () => void;
@@ -15,21 +17,25 @@ interface AuthCtx {
 }
 
 const AuthContext = createContext<AuthCtx>({
-  isLoggedIn: false, user: null,
+  isLoggedIn: false, user: null, authLoading: true,
   login: async () => {}, register: async () => {}, logout: () => {},
   showAuthModal: false, openAuthModal: () => {}, closeAuthModal: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<ApiUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     const t = localStorage.getItem("wuuw_token");
     if (t) {
-      apiGetMe().then(setUser).catch(() => {
-        localStorage.removeItem("wuuw_token");
-      });
+      apiGetMe()
+        .then(setUser)
+        .catch(() => { localStorage.removeItem("wuuw_token"); })
+        .finally(() => setAuthLoading(false));
+    } else {
+      setAuthLoading(false);
     }
   }, []);
 
@@ -52,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      isLoggedIn: !!user, user,
+      isLoggedIn: !!user, user, authLoading,
       login, register, logout,
       showAuthModal,
       openAuthModal: () => setShowAuthModal(true),
