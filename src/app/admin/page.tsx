@@ -39,6 +39,7 @@ export default function AdminPage() {
     { href: "/admin/models",       label: zh ? "模型管理" : "Models",       icon: "⬡" },
     { href: "/admin/reports",      label: zh ? "举报处理" : "Reports",      icon: "🚩", badge: stats?.pending_reports },
     { href: "/admin/certificates", label: zh ? "证书管理" : "Certificates", icon: "📜" },
+    { href: "/admin/invite-codes", label: zh ? "邀请码管理" : "Invite Codes", icon: "🔑" },
   ];
 
   const statCards = stats ? [
@@ -82,7 +83,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {navItems.map(n => (
             <Link key={n.href} href={n.href}
               className="relative p-5 rounded-2xl flex flex-col items-center gap-2 transition-all hover:-translate-y-0.5"

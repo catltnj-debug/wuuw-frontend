@@ -12,11 +12,11 @@ function authHeadersNoContent(): Record<string, string> {
 }
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
-export async function apiRegister(username: string, email: string, password: string) {
+export async function apiRegister(username: string, email: string, password: string, invite_code?: string) {
   const res = await fetch(`${API}/api/users/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, email, password, ...(invite_code ? { invite_code } : {}) }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || "注册失败");
@@ -236,6 +236,7 @@ export interface ApiUser {
   email: string;
   tier: string;
   token_balance: number;
+  is_admin?: boolean;
 }
 
 export interface ApiAsset {
@@ -258,6 +259,9 @@ export interface ApiAssetDetail {
   title: string;
   description?: string;
   creator: string;
+  creator_id?: number;
+  /** Expanded creator object if the backend returns it */
+  creator_obj?: { id: number; username: string } | null;
   file_format: string;
   file_size_bytes: number;
   current_version: string;
@@ -1175,4 +1179,107 @@ export async function apiAdminCerts(params?: { q?: string; page?: number }) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || "获取失败");
   return data as { total: number; page: number; items: { id: number; cert_no: string; asset_no: string | null; asset_title: string | null; file_hash: string; issued_at: string | null }[] };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    headers: { ...authHeaders(), ...(init?.headers as Record<string, string> | undefined) },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || `Request failed (HTTP ${res.status})`);
+  return data as T;
+}
+
+// ── Asset interactions ────────────────────────────────────────────────────────
+export async function apiRecordView(assetId: number) {
+  await apiFetch(`/api/assets/${assetId}/view`, { method: "POST" });
+}
+
+export async function apiLikeAsset(assetId: number) {
+  return apiFetch<{ liked: boolean; likes: number }>(`/api/assets/${assetId}/like`, { method: "POST" });
+}
+
+export async function apiGetAssetLikes(assetId: number) {
+  return apiFetch<{ likes: number; liked: boolean }>(`/api/assets/${assetId}/likes`);
+}
+
+export async function apiTipAsset(assetId: number, credits_amount: number, message?: string) {
+  return apiFetch<{ success: boolean; amount: number; to: string }>(`/api/assets/${assetId}/tip`, {
+    method: "POST",
+    body: JSON.stringify({ credits_amount, message }),
+  });
+}
+
+export async function apiGetAssetStats(assetId: number) {
+  return apiFetch<{ views: number; likes: number; comments: number }>(`/api/assets/${assetId}/stats`);
+}
+
+// ── Reddit discussions ────────────────────────────────────────────────────────
+export interface ApiRedditPost {
+  id: number;
+  asset_id: number;
+  zone_id: number | null;
+  user_id: number;
+  username: string;
+  content: string;
+  tag: string | null;
+  upvotes: number;
+  downvotes: number;
+  score: number;
+  likes_count: number;
+  reply_count: number;
+  detected_lang: string | null;
+  created_at: string;
+}
+
+export async function apiGetAssetDiscussions(assetId: number, params?: { tag?: string; sort?: string; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.tag) qs.set("tag", params.tag);
+  if (params?.sort) qs.set("sort", params.sort);
+  if (params?.page) qs.set("page", String(params.page));
+  return apiFetch<{ total: number; page: number; items: ApiRedditPost[] }>(
+    `/api/assets/${assetId}/discussions${qs.toString() ? "?" + qs : ""}`
+  );
+}
+
+export async function apiPostAssetDiscussion(assetId: number, content: string, tag: string, title?: string) {
+  return apiFetch<ApiRedditPost>(`/api/assets/${assetId}/discussions`, {
+    method: "POST",
+    body: JSON.stringify({ content, tag, title }),
+  });
+}
+
+export async function apiVoteDiscussion(discussionId: number, vote_type: "up" | "down") {
+  return apiFetch<{ discussion_id: number; upvotes: number; downvotes: number; score: number }>(
+    `/api/discussions/${discussionId}/vote`,
+    { method: "POST", body: JSON.stringify({ vote_type }) }
+  );
+}
+
+// ── Invite codes ──────────────────────────────────────────────────────────────
+export async function apiValidateInvite(code: string) {
+  return apiFetch<{ valid: boolean; code: string }>(`/api/auth/validate-invite?code=${encodeURIComponent(code)}`, { method: "POST" });
+}
+
+export async function apiGenerateInviteCodes(count: number, expires_days: number, max_uses: number) {
+  return apiFetch<{ generated: number; codes: string[] }>(`/api/admin/invite-codes`, {
+    method: "POST",
+    body: JSON.stringify({ count, expires_days, max_uses }),
+  });
+}
+
+export interface ApiInviteCode {
+  id: number;
+  code: string;
+  max_uses: number;
+  use_count: number;
+  used: boolean;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export async function apiGetInviteCodes(page = 1) {
+  return apiFetch<{ total: number; items: ApiInviteCode[] }>(`/api/admin/invite-codes?page=${page}`);
 }

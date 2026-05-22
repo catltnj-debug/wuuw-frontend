@@ -25,6 +25,7 @@ export default function AuthModal() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -36,7 +37,7 @@ export default function AuthModal() {
       if (tab === "login") {
         await login(username, password);
       } else {
-        await register(username, email, password);
+        await register(username, email, password, inviteCode || undefined);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : COPY_ERR[lang as keyof typeof COPY_ERR] ?? COPY_ERR.en);
@@ -126,6 +127,14 @@ export default function AuthModal() {
                 onChange={e => setPassword(e.target.value)}
                 required
               />
+              {tab === "register" && (
+                <input
+                  style={inputStyle}
+                  placeholder="Invite Code"
+                  value={inviteCode}
+                  onChange={e => setInviteCode(e.target.value)}
+                />
+              )}
 
               {error && (
                 <div className="text-xs px-3 py-2 rounded-lg" style={{ background: "rgba(255,80,80,0.1)", color: "#ff6b6b" }}>

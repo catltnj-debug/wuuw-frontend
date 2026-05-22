@@ -35,6 +35,23 @@ export default function HomePage() {
   return (
     <div style={{ background: "#050508" }}>
 
+      {/* ── Private Beta Badge ── */}
+      <div className="flex justify-center pt-4 pb-0">
+        <div className="flex items-center gap-2 px-4 py-2 rounded-full text-xs"
+          style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.18)", color: "#888" }}>
+          <span style={{ color: T }}>🔒</span>
+          <span>{lang === "zh" ? "当前处于私测阶段" : "Currently in Private Beta"}</span>
+          <span style={{ color: "#555" }}>·</span>
+          <a href="mailto:catltnj@gmail.com"
+            className="transition-colors"
+            style={{ color: T }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "0.7"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}>
+            {lang === "zh" ? "申请加入" : "Request Access"}
+          </a>
+        </div>
+      </div>
+
       {/* ── Hero Canvas ── */}
       <HeroCanvas />
 

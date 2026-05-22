@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { useParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import { useLang, COPY } from "@/lib/language";
 import {
@@ -12,8 +11,12 @@ import {
   apiClaimTask, apiCompleteDiscTask,
   apiGetBounties, apiPostBounty, apiClaimBounty, apiGetMyCredits,
   apiTranslate, apiUploadVoice,
+  apiGetAssetStats, apiLikeAsset, apiGetAssetLikes, apiTipAsset,
+  apiRecordView, apiGetAssetDiscussions, apiVoteDiscussion,
+  apiPostAssetDiscussion,
   type ApiAssetDetail, type ApiZone, type ApiZoneContent,
   type ApiDiscussion, type ApiSummary, type ApiDiscTask, type ApiBounty,
+  type ApiRedditPost,
 } from "@/lib/api";
 
 const ModelViewer = lazy(() => import("@/components/ModelViewer"));
@@ -161,6 +164,111 @@ function ShareButton({ title, lang }: { title: string; lang: string }) {
   );
 }
 
+// ── Reddit Post Card ──────────────────────────────────────────────────────────
+const TAG_COLOR: Record<string, string> = {
+  需求: "#00b4d8", 数据: "#00F5D4", 评测: "#F5A623", 灵感: "#BF5FFF", 问答: "#f56",
+};
+
+function RedditPostCard({ post, isLoggedIn, userId, onRefresh, lang }: {
+  post: ApiRedditPost;
+  isLoggedIn: boolean;
+  userId?: number;
+  onRefresh: () => void;
+  lang: string;
+}) {
+  const [localScore, setLocalScore] = useState(post.score);
+  const [showReplies, setShowReplies] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replying, setReplying] = useState(false);
+
+  async function handleVote(vt: "up" | "down") {
+    if (!isLoggedIn) return;
+    try {
+      const r = await apiVoteDiscussion(post.id, vt);
+      setLocalScore(r.score);
+    } catch {}
+  }
+
+  async function handleReply() {
+    if (!replyText.trim()) return;
+    setReplying(true);
+    try {
+      await fetch(`http://localhost:8001/api/discussions/${post.id}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("wuuw_token") ?? ""}` },
+        body: JSON.stringify({ content: replyText }),
+      });
+      setReplyText(""); onRefresh();
+    } catch {} finally { setReplying(false); }
+  }
+
+  function timeAgo(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    return `${Math.floor(h / 24)}d`;
+  }
+
+  return (
+    <div className="flex gap-3 p-4 rounded-2xl" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
+      {/* Vote column */}
+      <div className="flex flex-col items-center gap-1 pt-0.5">
+        <button onClick={() => handleVote("up")} className="text-sm transition-colors" style={{ color: "#555" }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = T}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#555"}>▲</button>
+        <span className="text-xs font-semibold" style={{ color: localScore > 0 ? T : localScore < 0 ? "#f56" : "#555" }}>
+          {localScore}
+        </span>
+        <button onClick={() => handleVote("down")} className="text-sm transition-colors" style={{ color: "#555" }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#f56"}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#555"}>▼</button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+          <span className="text-xs font-medium" style={{ color: "#888" }}>{post.username}</span>
+          {post.tag && (
+            <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: `${TAG_COLOR[post.tag] ?? "#666"}22`, color: TAG_COLOR[post.tag] ?? "#666", border: `1px solid ${TAG_COLOR[post.tag] ?? "#666"}44` }}>
+              {post.tag}
+            </span>
+          )}
+          <span className="text-xs" style={{ color: "#444" }}>{timeAgo(post.created_at)}</span>
+        </div>
+        <p className="text-sm mb-2" style={{ color: "#ccc" }}>{post.content}</p>
+        <div className="flex items-center gap-4 text-xs" style={{ color: "#444" }}>
+          <button onClick={() => setShowReplies(s => !s)} className="hover:text-white transition-colors">
+            💬 {post.reply_count ?? 0} {lang === "zh" ? "回复" : "replies"}
+          </button>
+          <button onClick={() => navigator.clipboard.writeText(window.location.href)} className="hover:text-white transition-colors">
+            ↗ {lang === "zh" ? "分享" : "Share"}
+          </button>
+        </div>
+
+        {showReplies && (
+          <div className="mt-3 pl-3 border-l-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+            {isLoggedIn && (
+              <div className="flex gap-2 mb-2">
+                <input value={replyText} onChange={e => setReplyText(e.target.value)}
+                  placeholder={lang === "zh" ? "写回复…" : "Write a reply…"}
+                  className="flex-1 px-3 py-1.5 rounded-xl text-xs"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+                <button onClick={handleReply} disabled={replying || !replyText.trim()}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+                  style={{ background: T, color: "#050508" }}>
+                  {replying ? "…" : lang === "zh" ? "回复" : "Reply"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AssetDetailPage() {
   const params = useParams();
   const assetId = Number(params.id);
@@ -184,6 +292,27 @@ export default function AssetDetailPage() {
   const [myCredits, setMyCredits] = useState<number | null>(null);
   const [claimingBountyId, setClaimingBountyId] = useState<number | null>(null);
 
+  // ── Stats & interactions ──
+  const [stats, setStats] = useState<{ views: number; likes: number; comments: number } | null>(null);
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [tipAmount, setTipAmount] = useState("10");
+  const [tipMessage, setTipMessage] = useState("");
+  const [tipping, setTipping] = useState(false);
+  const [tipSuccess, setTipSuccess] = useState(false);
+  // Reddit discussions
+  const [posts, setPosts] = useState<ApiRedditPost[]>([]);
+  const [postsTotal, setPostsTotal] = useState(0);
+  const [postTag, setPostTag] = useState("all");
+  const [postSort, setPostSort] = useState("hot");
+  const [postText, setPostText] = useState("");
+  const [postTitle, setPostTitle] = useState("");
+  const [newPostTag, setNewPostTag] = useState("需求");
+  const [submittingPost, setSubmittingPost] = useState(false);
+  const [showPostForm, setShowPostForm] = useState(false);
+  const [postsLoading, setPostsLoading] = useState(false);
+
   useEffect(() => {
     if (!assetId) return;
     Promise.all([apiGetAsset(assetId), apiGetZones(assetId), apiGetBounties({ asset_id: assetId })])
@@ -200,6 +329,34 @@ export default function AssetDetailPage() {
   useEffect(() => {
     if (isLoggedIn) apiGetMyCredits(1).then(r => setMyCredits(r.balance)).catch(() => {});
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!assetId) return;
+    apiGetAssetStats(assetId).then(s => {
+      setStats(s);
+      setLikeCount(s.likes);
+    }).catch(() => {});
+    apiGetAssetLikes(assetId).then(r => {
+      setLiked(r.liked);
+      setLikeCount(r.likes);
+    }).catch(() => {});
+    apiRecordView(assetId).catch(() => {});
+  }, [assetId]);
+
+  async function loadPosts() {
+    setPostsLoading(true);
+    try {
+      const res = await apiGetAssetDiscussions(assetId, {
+        tag: postTag === "all" ? undefined : postTag,
+        sort: postSort,
+      });
+      setPosts(res.items);
+      setPostsTotal(res.total);
+    } catch {} finally { setPostsLoading(false); }
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (assetId) loadPosts(); }, [assetId, postTag, postSort]);
 
   async function handlePostBounty() {
     const amount = parseFloat(bountyForm.amount);
@@ -242,6 +399,38 @@ export default function AssetDetailPage() {
   useEffect(() => {
     if (activeZone) loadZone(activeZone);
   }, [activeZone?.id]); // eslint-disable-line
+
+  async function handleLike() {
+    if (!isLoggedIn) return;
+    try {
+      const r = await apiLikeAsset(assetId);
+      setLiked(r.liked);
+      setLikeCount(r.likes);
+    } catch {}
+  }
+
+  async function handleTip() {
+    const amount = parseFloat(tipAmount);
+    if (isNaN(amount) || amount < 10) return;
+    setTipping(true);
+    try {
+      await apiTipAsset(assetId, amount, tipMessage || undefined);
+      setTipSuccess(true);
+      setTimeout(() => { setShowTipModal(false); setTipSuccess(false); setTipAmount("10"); setTipMessage(""); }, 2000);
+    } catch (e) { alert(e instanceof Error ? e.message : "Tip failed"); }
+    finally { setTipping(false); }
+  }
+
+  async function handleSubmitPost() {
+    if (!postText.trim()) return;
+    setSubmittingPost(true);
+    try {
+      await apiPostAssetDiscussion(assetId, postText.trim(), newPostTag, postTitle || undefined);
+      setPostText(""); setPostTitle(""); setShowPostForm(false);
+      await loadPosts();
+    } catch (e) { alert(e instanceof Error ? e.message : "Post failed"); }
+    finally { setSubmittingPost(false); }
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)]" style={{ background: "#050508" }}>
@@ -386,42 +575,141 @@ export default function AssetDetailPage() {
           </div>
         )}
 
-        {/* ── 讨论区 Tabs ── */}
-        {zones.length > 0 && (
-          <>
-            <div className="flex gap-1 p-1 rounded-xl mb-6" style={{ background: "rgba(255,255,255,0.03)" }}>
-              {zones.map(z => (
-                <button key={z.id} onClick={() => loadZone(z)}
-                  className="flex-1 py-2 rounded-lg text-xs font-medium transition-all"
-                  style={{
-                    background: activeZone?.id === z.id ? "rgba(0,245,212,0.1)" : "transparent",
-                    color: activeZone?.id === z.id ? T : "#555",
-                    border: activeZone?.id === z.id ? "1px solid rgba(0,245,212,0.2)" : "1px solid transparent",
-                  }}>
-                  {localizeZoneName(z.zone_name, lang === "zh")}
-                  <span className="ml-1.5 text-xs opacity-60">({z.discussion_count})</span>
+        {/* ── Stats bar ── */}
+        <div className="flex items-center gap-4 mb-4 text-xs" style={{ color: "#555" }}>
+          <span>👁 {stats ? (stats.views >= 1000 ? `${(stats.views/1000).toFixed(1)}k` : stats.views) : "—"} {lang === "zh" ? "浏览" : "views"}</span>
+          <span>❤️ {likeCount} {lang === "zh" ? "点赞" : "likes"}</span>
+          <span>💬 {stats?.comments ?? "—"} {lang === "zh" ? "评论" : "comments"}</span>
+        </div>
+
+        {/* ── Main action buttons ── */}
+        <div className="flex gap-3 mb-3">
+          <a href="#discussion-section"
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm"
+            style={{ background: T, color: "#050508" }}>
+            🖨️ {lang === "zh" ? "打印此模型" : "Print This"}
+          </a>
+          <button onClick={handleLike}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl font-semibold text-sm transition-all"
+            style={{
+              background: liked ? "rgba(255,80,120,0.15)" : "rgba(255,255,255,0.04)",
+              color: liked ? "#ff5078" : "#888",
+              border: `1px solid ${liked ? "rgba(255,80,120,0.3)" : "rgba(255,255,255,0.08)"}`,
+            }}>
+            {liked ? "❤️" : "🤍"} {likeCount}
+          </button>
+          <button onClick={() => isLoggedIn ? setShowTipModal(true) : null}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl font-semibold text-sm"
+            style={{ background: "rgba(245,166,35,0.1)", color: "#F5A623", border: "1px solid rgba(245,166,35,0.2)" }}>
+            💝 {lang === "zh" ? "打赏" : "Tip"}
+          </button>
+        </div>
+
+        {/* ── Secondary actions ── */}
+        <div className="flex gap-2 mb-6">
+          <ShareButton title={asset?.title ?? ""} lang={lang} />
+          <SaveButton assetId={assetId} lang={lang} />
+          <a href="#discussion-section" className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm"
+            style={{ background: "rgba(255,255,255,0.04)", color: "#777", border: "1px solid rgba(255,255,255,0.08)" }}>
+            💬 {lang === "zh" ? "跳到讨论" : "Discussion"}
+          </a>
+        </div>
+
+        {/* ── Reddit Discussion Section ── */}
+        <div id="discussion-section">
+          <div className="flex items-center justify-between mb-4">
+            <p className="font-semibold text-sm" style={{ color: "#ccc" }}>
+              {lang === "zh" ? "社区讨论" : "Community"} · {postsTotal}
+            </p>
+            {isLoggedIn && (
+              <button onClick={() => setShowPostForm(f => !f)}
+                className="flex items-center gap-1 px-4 py-1.5 rounded-xl text-sm font-semibold"
+                style={{ background: T, color: "#050508" }}>
+                + {lang === "zh" ? "发帖" : "Post"}
+              </button>
+            )}
+          </div>
+
+          {/* Tag filter */}
+          <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+            {["all","需求","数据","评测","灵感","问答"].map(tag => (
+              <button key={tag} onClick={() => setPostTag(tag)}
+                className="px-3 py-1 rounded-full text-xs whitespace-nowrap transition-all"
+                style={{
+                  background: postTag === tag ? T : "rgba(255,255,255,0.05)",
+                  color: postTag === tag ? "#050508" : "#666",
+                  border: postTag === tag ? "none" : "1px solid rgba(255,255,255,0.07)",
+                }}>
+                {tag === "all" ? (lang === "zh" ? "全部" : "All") : tag}
+              </button>
+            ))}
+            <div className="ml-auto flex gap-1">
+              {["hot","new","top"].map(s => (
+                <button key={s} onClick={() => setPostSort(s)}
+                  className="px-2 py-1 rounded-lg text-xs"
+                  style={{ color: postSort === s ? T : "#555" }}>
+                  {s === "hot" ? "🔥" : s === "new" ? "🆕" : "⬆️"}
                 </button>
               ))}
             </div>
+          </div>
 
-            {contentLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="rounded-2xl h-20 animate-pulse" style={{ background: "rgba(255,255,255,0.04)" }} />
-                ))}
+          {/* Post form */}
+          {showPostForm && (
+            <div className="p-4 rounded-2xl mb-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(0,245,212,0.15)" }}>
+              <input value={postTitle} onChange={e => setPostTitle(e.target.value)}
+                placeholder={lang === "zh" ? "标题（可选）" : "Title (optional)"}
+                className="w-full px-3 py-2 rounded-xl text-sm mb-2"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+              <textarea rows={3} value={postText} onChange={e => setPostText(e.target.value)}
+                placeholder={lang === "zh" ? "分享你的想法…" : "Share your thoughts…"}
+                className="w-full px-3 py-2 rounded-xl text-sm resize-none mb-2"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2">
+                  {["需求","数据","评测","灵感","问答"].map(tag => (
+                    <button key={tag} onClick={() => setNewPostTag(tag)}
+                      className="px-2 py-1 rounded-lg text-xs transition-all"
+                      style={{
+                        background: newPostTag === tag ? "rgba(0,245,212,0.15)" : "rgba(255,255,255,0.04)",
+                        color: newPostTag === tag ? T : "#555",
+                        border: newPostTag === tag ? "1px solid rgba(0,245,212,0.3)" : "1px solid rgba(255,255,255,0.07)",
+                      }}>
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowPostForm(false)} className="px-3 py-1.5 text-xs" style={{ color: "#555" }}>
+                    {lang === "zh" ? "取消" : "Cancel"}
+                  </button>
+                  <button onClick={handleSubmitPost} disabled={submittingPost || !postText.trim()}
+                    className="px-4 py-1.5 rounded-xl text-xs font-semibold"
+                    style={{ background: submittingPost ? "rgba(0,245,212,0.3)" : T, color: "#050508" }}>
+                    {submittingPost ? (lang === "zh" ? "发送中…" : "Posting…") : (lang === "zh" ? "发帖" : "Post")}
+                  </button>
+                </div>
               </div>
-            ) : zoneContent && activeZone ? (
-              <ZonePanel
-                zone={activeZone}
-                content={zoneContent}
-                userId={user?.id}
-                username={username}
-                isLoggedIn={isLoggedIn}
-                onRefresh={() => loadZone(activeZone)}
-              />
-            ) : null}
-          </>
-        )}
+            </div>
+          )}
+
+          {/* Posts list */}
+          {postsLoading ? (
+            <div className="space-y-3">
+              {[1,2,3].map(i => <div key={i} className="h-24 rounded-2xl animate-pulse" style={{ background: "rgba(255,255,255,0.04)" }} />)}
+            </div>
+          ) : posts.length === 0 ? (
+            <div className="text-center py-12" style={{ color: "#444" }}>
+              {lang === "zh" ? "还没有帖子，来发第一帖吧" : "No posts yet — be the first!"}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {posts.map(post => (
+                <RedditPostCard key={post.id} post={post} isLoggedIn={isLoggedIn} userId={user?.id} onRefresh={loadPosts} lang={lang} />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ── 相关悬赏 ── */}
         {assetBounties.length > 0 && (
@@ -437,6 +725,63 @@ export default function AssetDetailPage() {
         )}
       </div>
     </div>
+
+    {/* ── Tip Modal ── */}
+    {showTipModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)" }}
+        onClick={e => { if (e.target === e.currentTarget) setShowTipModal(false); }}>
+        <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: "#0d0d12", border: "1px solid rgba(245,166,35,0.25)" }}>
+          {tipSuccess ? (
+            <div className="text-center py-4">
+              <div className="text-4xl mb-3">💝</div>
+              <p className="font-semibold" style={{ color: "#ddd" }}>{lang === "zh" ? "打赏成功！" : "Tip sent!"}</p>
+              <p className="text-xs mt-1" style={{ color: "#555" }}>{lang === "zh" ? "感谢你支持设计师" : "Thank you for supporting the creator"}</p>
+            </div>
+          ) : (
+            <>
+              <h2 className="font-semibold mb-4" style={{ color: "#eee" }}>
+                💝 {lang === "zh" ? `打赏 ${asset?.creator ?? "设计师"}` : `Tip ${asset?.creator ?? "Creator"}`}
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs mb-1 block" style={{ color: "#666" }}>Credits {lang === "zh" ? "数量" : "Amount"} (min 10)</label>
+                  <input type="number" min="10" value={tipAmount} onChange={e => setTipAmount(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl text-sm"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+                  <div className="flex gap-2 mt-2">
+                    {[10, 50, 100, 500].map(v => (
+                      <button key={v} onClick={() => setTipAmount(String(v))}
+                        className="flex-1 py-1 rounded-lg text-xs"
+                        style={{ background: tipAmount === String(v) ? "rgba(245,166,35,0.15)" : "rgba(255,255,255,0.04)", color: tipAmount === String(v) ? "#F5A623" : "#666", border: "1px solid rgba(255,255,255,0.07)" }}>
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs mb-1 block" style={{ color: "#666" }}>{lang === "zh" ? "留言（可选）" : "Message (optional)"}</label>
+                  <input value={tipMessage} onChange={e => setTipMessage(e.target.value)}
+                    placeholder={lang === "zh" ? "感谢你的设计…" : "Love your design…"}
+                    className="w-full px-3 py-2 rounded-xl text-sm"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#ddd", outline: "none" }} />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => setShowTipModal(false)} className="flex-1 py-2 rounded-xl text-sm border" style={{ borderColor: "rgba(255,255,255,0.1)", color: "#666" }}>
+                  {lang === "zh" ? "取消" : "Cancel"}
+                </button>
+                <button onClick={handleTip} disabled={tipping}
+                  className="flex-1 py-2 rounded-xl text-sm font-semibold"
+                  style={{ background: tipping ? "rgba(245,166,35,0.3)" : "#F5A623", color: "#050508" }}>
+                  {tipping ? (lang === "zh" ? "处理中…" : "Sending…") : (lang === "zh" ? `确认打赏 ${tipAmount} Credits` : `Send ${tipAmount} Credits`)}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
 
     {/* ── 发起悬赏弹窗 ── */}
     {showBountyModal && (

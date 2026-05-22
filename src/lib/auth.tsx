@@ -7,7 +7,7 @@ interface AuthCtx {
   isLoggedIn: boolean;
   user: ApiUser | null;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>;
   logout: () => void;
   showAuthModal: boolean;
   openAuthModal: () => void;
@@ -40,8 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setShowAuthModal(false);
   }
 
-  async function register(username: string, email: string, password: string) {
-    await apiRegister(username, email, password);
+  async function register(username: string, email: string, password: string, inviteCode?: string) {
+    await apiRegister(username, email, password, inviteCode || undefined);
     await login(username, password);
   }
 
