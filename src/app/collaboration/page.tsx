@@ -231,7 +231,7 @@ function TaskCard({ task, currentUsername, onDone }: {
   onDone: () => void;
 }) {
   const [showModal, setShowModal] = useState(false);
-  const downloadUrl = `http://localhost:8001${task.download_url}`;
+  const downloadUrl = `${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001"}${task.download_url}`;
 
   return (
     <>

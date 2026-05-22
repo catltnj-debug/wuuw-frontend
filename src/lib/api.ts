@@ -1,4 +1,4 @@
-const API = "http://localhost:8001";
+const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001";
 
 function token() {
   return typeof window !== "undefined" ? localStorage.getItem("wuuw_token") : null;

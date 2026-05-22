@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const T = "#00F5D4";
-const API = "http://localhost:8001";
+const API = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001";
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
