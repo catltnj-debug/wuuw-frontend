@@ -1,3 +1,5 @@
+'use client';
+
 import Link from "next/link";
 
 const T = "#00F5D4";
