@@ -9,7 +9,7 @@ import { apiUploadAsset, apiUploadMedia, apiGetCategories, apiPatchTechParams, t
 
 const T = "#00F5D4";
 
-const NOZZLE_SIZES = ["0.2", "0.4", "0.6", "0.8"];
+const NOZZLE_SIZES = ["0.2", "0.25", "0.3", "0.35", "0.4", "0.5", "0.6", "0.8", "1.0", "1.2", "1.5", "2.0", "2.5", "3.0"];
 
 const NO_CAT_LABEL: Record<string, string> = {
   en: "No category",
