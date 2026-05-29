@@ -11,6 +11,91 @@ const T = "#00F5D4";
 
 const NOZZLE_SIZES = ["0.2", "0.4", "0.6", "0.8"];
 
+/* ── Custom dropdown (avoids native <select> dark-theme colour issues) ── */
+function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder = "—",
+  width = "100%",
+  small = false,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  width?: string | number;
+  small?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const selected = options.find(o => o.value === value);
+
+  const pad = small ? "5px 10px" : "10px 12px";
+  const fs  = small ? 12 : 14;
+
+  return (
+    <div ref={ref} style={{ position: "relative", width }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", padding: pad, fontSize: fs,
+          background: "#1a1a24",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 10,
+          color: selected ? "#e8e6e0" : "#555",
+          textAlign: "left", cursor: "pointer", outline: "none",
+          display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+        }}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <span style={{ opacity: 0.35, fontSize: 9, flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+          background: "#1a1a24",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 10, overflow: "hidden",
+          zIndex: 9999, maxHeight: 240, overflowY: "auto",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        }}>
+          {options.map(opt => {
+            const isSel = opt.value === value;
+            return (
+              <div
+                key={opt.value}
+                onClick={() => { onChange(opt.value); setOpen(false); }}
+                style={{
+                  padding: pad, fontSize: fs, cursor: "pointer",
+                  color: isSel ? "#00F5D4" : "#e8e6e0",
+                  background: isSel ? "rgba(0,245,212,0.08)" : "transparent",
+                }}
+                onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.06)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = isSel ? "rgba(0,245,212,0.08)" : "transparent"; }}>
+                {opt.label}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const inputStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.04)",
   border: "1px solid rgba(255,255,255,0.1)",
@@ -287,11 +372,18 @@ export default function UploadPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label style={labelStyle}>{zh ? "分类" : "Category"}</label>
-                <select value={categoryId} onChange={e => setCategoryId(e.target.value ? Number(e.target.value) : "")}
-                  className="w-full px-4 py-2.5 text-sm" style={inputStyle}>
-                  <option value="">{zh ? "不选分类" : "No category"}</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <CustomSelect
+                  value={categoryId === "" ? "" : String(categoryId)}
+                  onChange={v => setCategoryId(v ? Number(v) : "")}
+                  placeholder={zh ? "不选分类" : "No category"}
+                  options={[
+                    { value: "", label: zh ? "不选分类" : "No category" },
+                    ...categories.map(c => ({
+                      value: String(c.id),
+                      label: zh ? c.name : (c.name_en ?? c.name),
+                    })),
+                  ]}
+                />
               </div>
               <div>
                 <label style={labelStyle}>{zh ? "标签（逗号分隔）" : "Tags (comma-separated)"}</label>
@@ -345,17 +437,19 @@ export default function UploadPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label style={labelStyle}>{zh ? "材料类型" : "Material"}</label>
-                  <select value={tech.material} onChange={e => setTechField("material", e.target.value)}
-                    className="w-full px-3 py-2 text-sm" style={inputStyle}>
-                    {MATERIALS.map(m => <option key={m}>{m}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={tech.material}
+                    onChange={v => setTechField("material", v)}
+                    options={MATERIALS.map(m => ({ value: m, label: m }))}
+                  />
                 </div>
                 <div>
                   <label style={labelStyle}>{zh ? "推荐喷头 (mm)" : "Nozzle Size (mm)"}</label>
-                  <select value={tech.nozzle_mm} onChange={e => setTechField("nozzle_mm", e.target.value)}
-                    className="w-full px-3 py-2 text-sm" style={inputStyle}>
-                    {NOZZLE_SIZES.map(s => <option key={s}>{s}</option>)}
-                  </select>
+                  <CustomSelect
+                    value={tech.nozzle_mm}
+                    onChange={v => setTechField("nozzle_mm", v)}
+                    options={NOZZLE_SIZES.map(s => ({ value: s, label: s + " mm" }))}
+                  />
                 </div>
                 <div>
                   <label style={labelStyle}>{zh ? "预估重量 (g)" : "Est. Weight (g)"}</label>
@@ -464,11 +558,13 @@ export default function UploadPage() {
                         {(mf.file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>
-                    <select value={mf.kind}
-                      onChange={e => setMediaFiles(prev => prev.map((f, j) => j === i ? { ...f, kind: e.target.value } : f))}
-                      className="px-2 py-1 text-xs rounded-lg" style={{ ...inputStyle, width: "auto" }}>
-                      {MEDIA_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
-                    </select>
+                    <CustomSelect
+                      value={mf.kind}
+                      onChange={v => setMediaFiles(prev => prev.map((f, j) => j === i ? { ...f, kind: v } : f))}
+                      options={MEDIA_KINDS.map(k => ({ value: k.value, label: k.label }))}
+                      width="auto"
+                      small
+                    />
                     <button onClick={() => removeMedia(i)} className="text-xs px-2 py-1 rounded"
                       style={{ color: "#555" }}>✕</button>
                   </div>

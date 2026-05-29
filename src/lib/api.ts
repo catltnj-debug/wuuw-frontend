@@ -229,6 +229,7 @@ export async function apiMarkOneRead(notificationId: number) {
 export interface ApiCategory {
   id: number;
   name: string;
+  name_en?: string;
   slug: string;
   parent_id?: number | null;
   description?: string;
