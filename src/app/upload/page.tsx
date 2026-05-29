@@ -11,6 +11,14 @@ const T = "#00F5D4";
 
 const NOZZLE_SIZES = ["0.2", "0.4", "0.6", "0.8"];
 
+const NO_CAT_LABEL: Record<string, string> = {
+  en: "No category",
+  zh: "不选分类",
+  es: "Sin categoría",
+  pt: "Sem categoria",
+  ja: "カテゴリなし",
+};
+
 /* ── Custom dropdown (avoids native <select> dark-theme colour issues) ── */
 function CustomSelect({
   value,
@@ -375,12 +383,12 @@ export default function UploadPage() {
                 <CustomSelect
                   value={categoryId === "" ? "" : String(categoryId)}
                   onChange={v => setCategoryId(v ? Number(v) : "")}
-                  placeholder={zh ? "不选分类" : "No category"}
+                  placeholder={NO_CAT_LABEL[lang] ?? "No category"}
                   options={[
-                    { value: "", label: zh ? "不选分类" : "No category" },
+                    { value: "", label: NO_CAT_LABEL[lang] ?? "No category" },
                     ...categories.map(c => ({
                       value: String(c.id),
-                      label: zh ? c.name : (c.name_en ?? c.name),
+                      label: lang === "zh" ? c.name : (c.description || c.name_en || c.name),
                     })),
                   ]}
                 />
